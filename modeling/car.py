@@ -46,18 +46,15 @@ class Car:
         self.yaw = target_yaw + wrap_angle(self.yaw - target_yaw) 
 
     def check_collision(self, obstacles) -> bool:
-        
-        cos, sin = np.cos(self.yaw), np.sin(self.yaw)
-        center_x = self.x + self.BACK_TO_CENTER * cos
-        center_y = self.y + self.BACK_TO_CENTER * sin
-
         pts = obstacles.coordinates
-        local = (pts - [center_x, center_y]) @ np.array([[cos, sin], [-sin, cos]])
+        if pts.size == 0:
+            return False
 
-        return bool(
-            np.any(
-                np.logical_and(
-                    np.abs(local[:, 0]) < (self.LENGTH)/2),
-                    np.abs(local[: 1]) < (self.WIDTH)/2
-                )
-            )
+        cos, sin = np.cos(self.yaw), np.sin(self.yaw)
+        cx = self.x + self.BACK_TO_CENTER * cos
+        cy = self.y + self.BACK_TO_CENTER * sin
+
+        local = (pts - [cx, cy]) @ np.array([[cos, sin], [-sin, cos]])
+
+        inside = (np.abs(local[:, 0]) < self.LENGTH/2) & (np.abs(local[:, 1]) < self.WIDTH/2)
+        return bool(np.any(inside))

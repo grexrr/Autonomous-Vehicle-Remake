@@ -1,18 +1,31 @@
+from typing import Any, NamedTuple
 import numpy as np
-from dataclasses import dataclass
+import numpy.typing as npt
+from scipy.spatial import KDTree
 
-@dataclass
-class ObstacleGrid:
+class ObstacleGrid(NamedTuple):
     minx: float
     maxx: float
-    minx: float
     miny: float
+    maxy: float
     resolution: float
-    grid: np.ndarray
+    grid: np.ndarray  # shape = [rows(y_count), cols(x_count)]
+
+    def calc_index(self, xy: tuple[float, float]) -> tuple[int, int]:
+        x, y = xy
+        i = int((y - self.miny) / self.resolution)  # 行（沿 y）
+        j = int((x - self.minx) / self.resolution)  # 列（沿 x）
+        return i, j
 
 class Obstacles:
-    def __init__(self):
-        self._coordinates = []  # list of (x, y)
+    def __init__(self, coordinates: npt.NDArray[np.floating[Any]]) -> None:
+        assert coordinates.ndim == 2 and coordinates.shape[1] == 2, "Coordinates must be a 2D array of shape (n, 2)"
+        self._coordinates = coordinates
+        self.kd_tree = KDTree(coordinates)
+    
+    @property
+    def coordinates(self) -> np.ndarray:
+        return self._coordinates
 
     def downsampling_to_grid(self, resolution: float, radius: float) -> ObstacleGrid:
         half_res = resolution / 2
