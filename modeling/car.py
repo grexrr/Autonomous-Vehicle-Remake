@@ -14,6 +14,11 @@ class Car:
     MIN_SPEED = -30 / 3.6
     MAX_SPEED = 55.0 / 3.6
     MAX_ACCEL = 15.0 
+
+    COLLISION_LENGTH = LENGTH + 2.0
+    COLLISION_WIDTH = WIDTH + 2.0
+    COLLISION_RADIUS = float(np.hypot(COLLISION_LENGTH/2, COLLISION_WIDTH/2))
+    
     
     def __init__(self, x:float, y:float, yaw:float) -> None:
         self.x = x                # [m]
@@ -53,8 +58,14 @@ class Car:
         cos, sin = np.cos(self.yaw), np.sin(self.yaw)
         cx = self.x + self.BACK_TO_CENTER * cos
         cy = self.y + self.BACK_TO_CENTER * sin
+        ids = obstacles.kd_tree.query_ball_point([cx, cy], self.COLLISION_RADIUS)
+        
+        candidates = obstacles.coordinates[ids]
+        candidates = (candidates - [cx, cy]) @ np.array([[cos, sin], [-sin, cos]])
 
-        local = (pts - [cx, cy]) @ np.array([[cos, sin], [-sin, cos]])
-
-        inside = (np.abs(local[:, 0]) < self.LENGTH/2) & (np.abs(local[:, 1]) < self.WIDTH/2)
-        return bool(np.any(inside))
+        return np.any(
+            np.logical_and(
+                np.abs(candidates[:, 0]) < self.COLLISION_LENGTH / 2,
+                np.abs(candidates[:, 1]) < self.COLLISION_WIDTH / 2,
+            )
+        )
