@@ -1,8 +1,15 @@
 # Autonomous Vehicle 
 
-This project implements an autonomous driving path planning system based on the **Hybrid A* Algorithm**. The core idea of this algorithm is to use the evaluation function **f = g + h** to guide the search process:
+This project is a learning project for an autonomous driving path planning system based on the **Hybrid A* Algorithm**. The original project was inspired by FredBill1's open-source implementation: https://github.com/FredBill1/AutonomousDrivingDemo.git
+
+**Learning Background:**
+- Initially participated as a group project, mainly responsible for the global planner part
+- To deeply understand the algorithm principles and implementation details, I am now independently redoing the entire project
+- Focus on learning the application of the Hybrid A* Algorithm in vehicle motion planning with non-holonomic constraints
 
 ## Core Algorithm
+
+This project implements an autonomous driving path planning system based on the **Hybrid A* Algorithm**. The core idea of this algorithm is to use the evaluation function **f = g + h** to guide the search process:
 
 - **g(n)**: The actual cost from the start to the current node n
   - Includes path length, steering angle changes, direction switches, and other motion costs
