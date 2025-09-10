@@ -120,12 +120,7 @@ $$\Bigl|a_{y,k}\Bigr| = \left|\frac{v_k^{2}\tan\delta_k}{L}\right|
 
 Commonly used **speed-dependent steering angle limit**:
 $$
-|\delta_k|
-\le
-\min\!\left(
-\delta_{\max},\;
-\arctan\!\frac{a_{y,\max}\,L}{\max(v_k^{2},\,\varepsilon)}
-\right)
+|\delta_k| \le \min\left( \delta_{\max}, \arctan\frac{a_{y,\max} L}{\max(v_k^{2}, \varepsilon)} \right)
 $$
 > The faster you go, the smaller the allowable steering angle to prevent skidding.
 
