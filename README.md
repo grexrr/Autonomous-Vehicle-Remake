@@ -9,7 +9,14 @@ This project is a learning project for an autonomous driving path planning syste
 
 ## Core Algorithm
 
-This project implements an autonomous driving path planning system based on the **Hybrid A* Algorithm**. The core idea of this algorithm is to use the evaluation function **f = g + h** to guide the search process:
+In autonomous driving systems, path planning is typically divided into two levels: **Global Planner** and **Local Planner**. These two levels work together, each with its own responsibilities, to achieve safe and efficient vehicle autonomous navigation.
+
+- Global Planner (Hybrid A*) provides a "big road to follow"—a series of discrete $[x, y, \psi]$ points that can avoid obstacles but do not consider constraints like motor/tires/steering speed/acceleration or timing (such as how much to steer or accelerate every 70ms in a real car).
+
+- Local Planner (MPC) checks the current position, orientation, and speed of the car at regular intervals (your LOCAL_PLANNER_DELTA_TIME); it then extracts a "reference segment" (prediction domain) from the global reference for the next few seconds, "tries" various future sequences of throttle and steering actions on paper, and selects the best plan (with the smallest error, smoothest actions, and within physical limits)—only executing the first action and recalculating in the next step. This is called receding horizon optimization.
+
+### Global Planner
+The path planning system is based on the **Hybrid A* Algorithm**. The core idea of this algorithm is to use the evaluation function **f = g + h** to guide the search process:
 
 - **g(n)**: The actual cost from the start to the current node n
   - Includes path length, steering angle changes, direction switches, and other motion costs
@@ -64,6 +71,84 @@ while open is not empty:
         best_g[key] = g2
         heappush(open, child)
 ```
+
+### Local Planner (MPC)
+
+**Model Predictive Control (MPC)** is an advanced control strategy used in the local planning of autonomous vehicles. It involves predicting the future behavior of the vehicle over a defined prediction horizon and optimizing the control inputs to achieve desired objectives. MPC takes into account the vehicle's dynamics, constraints, and a reference trajectory to minimize tracking errors and ensure smooth control actions. By solving an optimization problem at each time step, MPC provides a sequence of control actions that guide the vehicle along the optimal path while respecting physical and regulatory constraints.
+
+#### Prediction Horizon
+Choose a prediction length \(N\) (e.g., 10 steps) and a step size \(\Delta t\) (your `LOCAL_PLANNER_DELTA_TIME`). The Local Planner only focuses on the next \(N\) steps at a time.
+
+#### Vehicle Model (Kinematic Bicycle Model)
+Given:
+- \(u_k = [a_k, \delta_k]\): throttle/brake (longitudinal acceleration \(a_k\)) and front wheel steering angle \(\delta_k\)
+- \(L\): wheelbase (`Car.WHEEL_BASE`)
+
+The discretized kinematic model is:
+\[
+\begin{aligned}
+X_{k+1} &= X_k + v_k \cos\psi_k\,\Delta t \\
+Y_{k+1} &= Y_k + v_k \sin\psi_k\,\Delta t \\
+v_{k+1} &= v_k + a_k\,\Delta t \\
+\psi_{k+1} &= \psi_k + \frac{v_k}{L}\tan\delta_k\,\Delta t
+\end{aligned}
+\]
+
+#### Scoring (Objective Function)
+The goal is for the vehicle to follow the reference trajectory closely while maintaining smooth control actions:
+\[
+J=\sum_{k=0}^{N}\|x_k - x_k^{\mathrm{ref}}\|_Q^2 + \sum_{k=0}^{N-1}\|u_k - u_k^{\mathrm{ref}}\|_R^2 + \sum_{k=0}^{N-2}\|\Delta u_k\|_{R_\Delta}^2
+\]
+
+Where:
+- The first term: tracking error in position/orientation/velocity (usually \(Y\) and \(\psi\) have higher weights)
+- The second term: avoid sudden throttle or steering changes
+- The third term: change in control between consecutive frames, ensuring smoothness (avoiding "jerky steering")
+
+#### Hard Constraints (Physical/Regulatory)
+1. Steering limit:
+\[
+|\delta| \le \texttt{Car.MAX\_STEER}
+\]
+2. Acceleration limit:
+\[
+|a| \le \texttt{Car.MAX\_ACCEL}
+\]
+3. Speed range:
+\[
+0 \le v \le \texttt{Car.MAX\_SPEED}
+\]
+4. Lateral acceleration limit (critical!):
+\[
+|a_y| = \left| \frac{v^2 \tan\delta}{L} \right| \le a_{y,\max}
+\]
+
+Commonly used **speed-dependent steering angle limit**:
+\[
+|\delta| \le \min\left(
+\texttt{Car.MAX\_STEER},\;
+\arctan\frac{a_{y,\max}L}{\max(v^2,\varepsilon)}
+\right)
+\]
+> The faster you go, the smaller the allowable steering angle to prevent skidding.
+
+#### Solution (QP + Iterative Linearization)
+This is a **constrained Quadratic Programming (QP)** problem.
+
+For linear solvability, **iterative linearization** is commonly used:
+1. Use the current "nominal trajectory" \((\bar{x}_k, \bar{u}_k)\) (can be the last solution or a zero-control rollout)
+2. Linearize the model at the nominal trajectory:
+   \[
+   x_{k+1} \approx A_k x_k + B_k u_k + C_k
+   \]
+3. Solve a QP (cost function + hard constraints)
+4. Roll out the solution \(U\) to update the nominal trajectory
+5. Repeat 1–3 times (usually 1–3 iterations are sufficient)
+
+Execution method:
+- Execute only the first control \(u_0\) obtained from this optimization
+- Recalculate in the next step (rolling optimization)
+
 
 ## Test-Demo
 

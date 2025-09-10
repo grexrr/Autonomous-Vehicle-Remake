@@ -11,16 +11,16 @@ from modeling.obstacles import Obstacles
 from modeling.car import Car
 import global_planner.hybrid_a_star as hb
 
-# 可选：统一随机数种子，便于复现
+# 可选: 统一随机数种子，便于复现
 np.random.seed(0)
 
 # ---------- 1) 造障碍 ----------
 def make_test_obstacles():
-    """60x60 围墙 + 两根栏杆（在 x=20 和 x=40, y∈[10,50]）"""
+    """60x60 围墙 + 两根栏杆(在 x=20 和 x=40, y∈[10,50])"""
     pts = []
     W, H = 60.0, 60.0
 
-    # 四周围墙（稠一些可视化更清晰）
+    # 四周围墙(稠一些可视化更清晰)
     for x in np.linspace(0, W, int(W*2)+1):
         pts += [(x, 0.0), (x, H)]
     for y in np.linspace(0, H, int(H*2)+1):
@@ -31,7 +31,7 @@ def make_test_obstacles():
         pts.append((20.0, y))
         pts.append((40.0, y))
 
-    # 可选：添加少量随机散点障碍（注释掉即可关闭）
+    # 可选: 添加少量随机散点障碍(注释掉即可关闭)
     # for _ in range(40):
     #     pts.append((np.random.uniform(5, 55), np.random.uniform(5, 55)))
 
@@ -39,7 +39,7 @@ def make_test_obstacles():
 
 # ---------- 2) 画车身矩形 ----------
 def car_corners(x, y, yaw, L=Car.LENGTH, W=Car.WIDTH, back_to_center=Car.BACK_TO_CENTER):
-    """返回车身矩形四角（闭合），世界坐标"""
+    """返回车身矩形四角(闭合)，世界坐标"""
     cx = x + back_to_center * math.cos(yaw)
     cy = y + back_to_center * math.sin(yaw)
     box = np.array([[-L/2, -W/2],
@@ -62,14 +62,14 @@ def any_collision_along(path_xyyaw, obstacles):
 # ---------- 4) 动画版本的主测试 ----------
 def run_case_animated(start, goal, obstacles, title="Hybrid A* demo", save_gif=True, case_name="demo"):
     """
-    start, goal: [x, y, yaw]（yaw单位：弧度）
+    start, goal: [x, y, yaw](yaw单位: 弧度)
     """
     print(f"[CASE] start={start}, goal={goal}")
 
     path = hb.hybrid_a_star(np.array(start, float), np.array(goal, float), obstacles)
 
     if path is None:
-        print("✗ 未找到路径（可能参数需要微调：转角离散/段长/步长/安全半径）")
+        print("✗ 未找到路径(可能参数需要微调: 转角离散/段长/步长/安全半径)")
         return
 
     # 统计信息
@@ -80,14 +80,14 @@ def run_case_animated(start, goal, obstacles, title="Hybrid A* demo", save_gif=T
 
     # 碰撞复核
     collided = any_collision_along(path, obstacles)
-    print("碰撞复核：", "✗ 有碰撞" if collided else "✓ 无碰撞")
+    print("碰撞复核: ", "✗ 有碰撞" if collided else "✓ 无碰撞")
 
     # ---------- 动画设置 ----------
     fig, ax = plt.subplots(figsize=(10, 8))
     ax.set_aspect('equal', 'box')
     ax.set_title(title, fontsize=14)
 
-    # 障碍（灰色）
+    # 障碍(灰色)
     ax.scatter(obstacles.coordinates[:,0], obstacles.coordinates[:,1], 
                s=8, c='#888888', alpha=0.7, label='obstacles')
 
@@ -95,7 +95,7 @@ def run_case_animated(start, goal, obstacles, title="Hybrid A* demo", save_gif=T
     ax.plot(start[0], start[1], 'go', ms=12, label='start', markeredgecolor='darkgreen', markeredgewidth=2)
     ax.plot(goal[0], goal[1], 'rx', ms=12, mew=3, label='goal')
 
-    # 完整路径（淡色）
+    # 完整路径(淡色)
     path_x, path_y = path[:, 0], path[:, 1]
     ax.plot(path_x, path_y, '-', lw=1, c='lightblue', alpha=0.5, label='planned path')
 
@@ -128,7 +128,7 @@ def run_case_animated(start, goal, obstacles, title="Hybrid A* demo", save_gif=T
         # 计算车身轮廓
         poly = car_corners(x, y, yaw)
         
-        # 计算方向箭头（从车中心指向前方）
+        # 计算方向箭头(从车中心指向前方)
         arrow_length = 2.0
         arrow_x = [x, x + arrow_length * math.cos(yaw)]
         arrow_y = [y, y + arrow_length * math.sin(yaw)]
@@ -147,7 +147,7 @@ def run_case_animated(start, goal, obstacles, title="Hybrid A* demo", save_gif=T
             'total_time': total_time
         })
         
-        # 更新时间（基于路径段长度）
+        # 更新时间(基于路径段长度)
         if i < N - 1:
             segment_length = math.hypot(path[i+1, 0] - path[i, 0], path[i+1, 1] - path[i, 1])
             total_time += segment_length / 3.0  # 假设平均速度3m/s
@@ -215,7 +215,7 @@ def run_case_animated(start, goal, obstacles, title="Hybrid A* demo", save_gif=T
         plt.ioff()
         plt.show()
 
-# ---------- 5) 原始静态版本（保留） ----------
+# ---------- 5) 原始静态版本(保留) ----------
 def run_case_static(start, goal, obstacles, title="Hybrid A* demo"):
     """
     原始的静态绘图版本
@@ -225,7 +225,7 @@ def run_case_static(start, goal, obstacles, title="Hybrid A* demo"):
     path = hb.hybrid_a_star(np.array(start, float), np.array(goal, float), obstacles)
 
     if path is None:
-        print("✗ 未找到路径（可能参数需要微调：转角离散/段长/步长/安全半径）")
+        print("✗ 未找到路径(可能参数需要微调: 转角离散/段长/步长/安全半径)")
         return
 
     # 统计信息
@@ -236,21 +236,21 @@ def run_case_static(start, goal, obstacles, title="Hybrid A* demo"):
 
     # 碰撞复核
     collided = any_collision_along(path, obstacles)
-    print("碰撞复核：", "✗ 有碰撞" if collided else "✓ 无碰撞")
+    print("碰撞复核: ", "✗ 有碰撞" if collided else "✓ 无碰撞")
 
     # ---------- 绘图 ----------
     fig, ax = plt.subplots(figsize=(7,7))
     ax.set_aspect('equal', 'box')
     ax.set_title(title)
 
-    # 障碍（灰色）
+    # 障碍(灰色)
     ax.scatter(obstacles.coordinates[:,0], obstacles.coordinates[:,1], s=8, c='#888888', alpha=0.7, label='obstacles')
 
     # 起终点
     ax.plot(start[0], start[1], 'go', ms=8, label='start')
     ax.plot(goal[0], goal[1], 'rx', ms=10, mew=2, label='goal')
 
-    # 路径：按方向上色
+    # 路径: 按方向上色
     # 前进蓝色，倒车橙色
     for i in range(1, N):
         x0,y0,_, d0 = path[i-1]
@@ -275,21 +275,21 @@ def main(animated=True, save_gif=True):
     if animated:
         print("=== 生成动画版本 ===")
         
-        # 场景1：左下 -> 右上，朝向均为0°
+        # 场景1: 左下 -> 右上，朝向均为0°
         start = [5.0, 5.0, 0.0]
         goal  = [55.0, 55.0, 0.0]
         run_case_animated(start, goal, obstacles, 
                          title="Hybrid A* — Diagonal Path", 
                          save_gif=save_gif, case_name="diagonal")
 
-        # 场景2：左下 -> 右上，目标朝向90°（考验终端对齐）
+        # 场景2: 左下 -> 右上，目标朝向90°(考验终端对齐)
         start2 = [5.0, 5.0, 0.0]
         goal2  = [55.0, 55.0, math.radians(90)]
         run_case_animated(start2, goal2, obstacles, 
                          title="Hybrid A* — Diagonal Path, Goal Yaw=90°", 
                          save_gif=save_gif, case_name="diagonal_90")
 
-        # 场景3：通道穿越（起点在两栏杆之间）
+        # 场景3: 通道穿越(起点在两栏杆之间)
         start3 = [30.0, 8.0, math.radians(90)]
         goal3  = [30.0, 52.0, math.radians(90)]
         run_case_animated(start3, goal3, obstacles, 
@@ -298,17 +298,17 @@ def main(animated=True, save_gif=True):
     else:
         print("=== 生成静态版本 ===")
         
-        # 场景1：左下 -> 右上，朝向均为0°
+        # 场景1: 左下 -> 右上，朝向均为0°
         start = [5.0, 5.0, 0.0]
         goal  = [55.0, 55.0, 0.0]
         run_case_static(start, goal, obstacles, title="Hybrid A* — diagonal")
 
-        # 场景2：左下 -> 右上，目标朝向90°（考验终端对齐）
+        # 场景2: 左下 -> 右上，目标朝向90°(考验终端对齐)
         start2 = [5.0, 5.0, 0.0]
         goal2  = [55.0, 55.0, math.radians(90)]
         run_case_static(start2, goal2, obstacles, title="Hybrid A* — diagonal, goal yaw=90°")
 
-        # 场景3：通道穿越（起点在两栏杆之间）
+        # 场景3: 通道穿越(起点在两栏杆之间)
         start3 = [30.0, 8.0, math.radians(90)]
         goal3  = [30.0, 52.0, math.radians(90)]
         run_case_static(start3, goal3, obstacles, title="Hybrid A* — corridor")
