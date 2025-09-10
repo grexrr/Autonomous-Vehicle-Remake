@@ -85,15 +85,19 @@ Given:
 - $L$: wheelbase (`Car.WHEEL_BASE`)
 
 The discretized kinematic model is:
-$$\begin{aligned}
+
+$$
+\begin{aligned}
 X_{k+1} &= X_k + v_k \cos\psi_k\,\Delta t \\
 Y_{k+1} &= Y_k + v_k \sin\psi_k\,\Delta t \\
 v_{k+1} &= v_k + a_k\,\Delta t \\
 \psi_{k+1} &= \psi_k + \frac{v_k}{L}\tan\delta_k\,\Delta t
-\end{aligned}$$
+\end{aligned}
+$$
 
 #### Scoring (Objective Function)
 The goal is for the vehicle to follow the reference trajectory closely while maintaining smooth control actions:
+
 $$
 J=\sum_{k=0}^{N}\|x_k - x_k^{\mathrm{ref}}\|_Q^2 + \sum_{k=0}^{N-1}\|u_k - u_k^{\mathrm{ref}}\|_R^2 + \sum_{k=0}^{N-2}\|\Delta u_k\|_{R_\Delta}^2
 $$
