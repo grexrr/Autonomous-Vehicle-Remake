@@ -251,16 +251,15 @@ def hybrid_a_star(start: npt.NDArray[np.floating[Any]],
         return Node(best, node.cost + best_cost, 0.0, node)
 
     def _reconstruct_path(node: Node) -> npt.NDArray[np.floating[Any]]:
-        """
-        Traceback the path from the goal to the start, to get the final trajectory
-        returns [[x(m), y(m), yaw(rad), direction(1, -1)]]
-        """ 
         segs = []
         cur = node
         while cur is not None:
             if isinstance(cur.path, RSPath):
-                pts = np.array([[p.x, p.y, 0.0] for p in cur.path.waypoints()], float)  # 简化 yaw=0
-                dircol = np.full((pts.shape[0], 1), cur.parent.path.direction if cur.parent else 1, float)
+                xs, ys, yaws = cur.path.coordinates_tuple()  
+                pts = np.stack([xs, ys, yaws], axis=1)
+                
+                d = cur.parent.path.direction if cur.parent and not isinstance(cur.parent.path, RSPath) else 1
+                dircol = np.full((pts.shape[0], 1), d, float)
                 segs.append(np.hstack([pts, dircol]))
             else:
                 traj = cur.path.trajectory  # [N,3]
@@ -268,8 +267,8 @@ def hybrid_a_star(start: npt.NDArray[np.floating[Any]],
                 segs.append(np.hstack([traj, dircol]))
             cur = cur.parent
         segs.reverse()
-        return np.vstack(segs)  # [N,4]=x,y,yaw,dir
-    
+        return np.vstack(segs)
+
     def _end_pose(n:Node) -> tuple[float, float, float]:
         if isinstance(n.path, RSPath):
             last_waypoint = n.path.waypoints()[-1]
