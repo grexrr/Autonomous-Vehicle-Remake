@@ -110,28 +110,32 @@ Where:
 #### Hard Constraints (Physical/Regulatory)
 1. Steering limit:
 $$
-|\delta| \le \texttt{Car.MAX\_STEER}
+|\delta_k| \le \delta_{\max}\,.
 $$
 2. Acceleration limit:
 $$
-|a| \le \texttt{Car.MAX\_ACCEL}
+|a_k| \le a_{\max}\,.
 $$
 3. Speed range:
 $$
-0 \le v \le \texttt{Car.MAX\_SPEED}
+0 \le v_k \le v_{\max}\,.
 $$
 4. Lateral acceleration limit (critical!):
-\[
-|a_y| = \left| \frac{v^2 \tan\delta}{L} \right| \le a_{y,\max}
-\]
+$$
+\Bigl|a_{y,k}\Bigr|
+= \left|\frac{v_k^{2}\tan\delta_k}{L}\right|
+\le a_{y,\max}\,.
+$$
 
 Commonly used **speed-dependent steering angle limit**:
-\[
-|\delta| \le \min\left(
-\texttt{Car.MAX\_STEER},\;
-\arctan\frac{a_{y,\max}L}{\max(v^2,\varepsilon)}
-\right)
-\]
+$$
+|\delta_k|
+\le
+\min\!\left(
+\delta_{\max},\;
+\arctan\!\frac{a_{y,\max}\,L}{\max(v_k^{2},\,\varepsilon)}
+\right).
+$$
 > The faster you go, the smaller the allowable steering angle to prevent skidding.
 
 #### Solution (QP + Iterative Linearization)
@@ -140,9 +144,9 @@ This is a **constrained Quadratic Programming (QP)** problem.
 For linear solvability, **iterative linearization** is commonly used:
 1. Use the current "nominal trajectory" $(\bar{x}_k, \bar{u}_k)$ (can be the last solution or a zero-control rollout)
 2. Linearize the model at the nominal trajectory:
-   \[
+   $$
    x_{k+1} \approx A_k x_k + B_k u_k + C_k
-   \]
+   $$
 3. Solve a QP (cost function + hard constraints)
 4. Roll out the solution $U$ to update the nominal trajectory
 5. Repeat 1–3 times (usually 1–3 iterations are sufficient)
