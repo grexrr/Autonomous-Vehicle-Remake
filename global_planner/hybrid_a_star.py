@@ -1,15 +1,16 @@
 import math, heapq
 from collections.abc import Callable, Generator
 from typing import Any, Literal, NamedTuple, Optional
-from itertools import islice, product
+# from itertools import islice, product
 
 import numpy as np
 import numpy.typing as npt
 from rsplan import Path as RSPath
+from rsplan.planner import _solve_path as solve_rspath
 
-from ..constants import *
-from ..utils.wrap_angle import wrap_angle
-from ..utils.SupportsBool import SupportsBool
+from constants import *
+from utils.wrap_angle import wrap_angle
+from utils.SupportsBool import SupportsBool
 from modeling.car import Car
 from modeling.obstacles import ObstacleGrid, Obstacles
 
@@ -109,8 +110,8 @@ def hybrid_a_star(start: npt.NDArray[np.floating[Any]],
     if Car(*goal).check_collision(obstacles):
         return None
     
-    start_is_point = start.shape == (3,)
-    start_collided = Car(*start).check_collision(obstacles) if start_is_point else False
+    # start_is_point = start.shape == (3,)
+    # start_collided = Car(*start).check_collision(obstacles) if start_is_point else False
 
     # Downsample the obstacle map to a grid
     obstacle_grid = obstacles.downsampling_to_grid(
@@ -138,17 +139,27 @@ def hybrid_a_star(start: npt.NDArray[np.floating[Any]],
 
         # Simulate the car movement for MOTION_DISTANCE, with a interval of MOTION_RESOLUTION,
         # check if the car will collide with the obstacles during the movement
-        car = Car(*curr.path.trajectory[-1, :3], velocity=float(direction), steer=steer)
+
+        x, y, yaw = curr.path.trajectory[-1, :3]
+
+        car = Car(float(x), float(y), float(yaw), velocity=1.0*direction, steer=float(steer))
+        steps = int(math.ceil(MOTION_DISTANCE / MOTION_RESOLUTION))
+
         trajectory = []
-        for _ in range(int(MOTION_DISTANCE / MOTION_RESOLUTION)):
-            car.update(MOTION_RESOLUTION)
-            if not start_collided and car.check_collision(obstacles):
+      
+        for _ in range(steps):
+            car.update(MOTION_RESOLUTION, do_wrap_angle=True)
+            if car.check_collision(obstacles):
                 return None
             trajectory.append([car.x, car.y, car.yaw])
+        trajectory = np.asarray(trajectory, float)
 
-        i, j, k = _calc_ijk(car.x, car.y, car.yaw)
+        # 离散 + 出界/占据
+        i, j, k = _calc_ijk(trajectory[-1,0], trajectory[-1,1], trajectory[-1,2])
         if not (0 <= i < N and 0 <= j < M):
-            print(f"Out of grid, please add more obstacles to fill the boundary: {i=} {j=}")
+            # print(f"Out of grid: i={i}, j={j}")
+            return None
+        if obstacle_grid.grid[i, j]:
             return None
 
         # Calculate the cost from the start to this neighbour node
@@ -156,7 +167,10 @@ def hybrid_a_star(start: npt.NDArray[np.floating[Any]],
         switch_direction_cost = (
             SWITCH_DIRECTION_COST if curr.path.direction != 0 and direction != curr.path.direction else 0.0
         )
-        steer_change_cost = STEER_CHANGE_COST * abs(steer - curr.path.steer)
+        # steer_change_cost = STEER_CHANGE_COST * abs(steer - curr.path.steer)
+        steer_change_cost = STEER_CHANGE_COST * (
+            abs(steer - curr.path.steer) if curr.path.direction != 0 else 0.0
+        )
         steer_cost = STEER_COST * abs(steer) * MOTION_DISTANCE
         cost = curr.cost + distance_cost + switch_direction_cost + steer_change_cost + steer_cost
 
@@ -169,12 +183,11 @@ def hybrid_a_star(start: npt.NDArray[np.floating[Any]],
     
     def _generate_neighbors(curr: Node,) -> Generator[Node, None, None]:
         "Generate all possible neighbours of the current node"
-        nonlocal start_collided
-        for direction, steer in product([1, -1], STEER_COMMANDS):
-            if (res := rollout(curr, direction, steer)) is not None:
-                yield res
-        start_collided = False
-        return 
+        for direction in (+1, -1):
+            for steer in STEER_COMMANDS:
+                child = rollout(curr, int(direction), float(steer))
+                if child is not None:
+                    yield child
     
     def _reached_goal(x: float, y:float, yaw:float) -> bool:
         pos_ok = np.hypot(x - goal[0], y - goal[1]) <= XY_GRID_RESOLUTION * 1.0
@@ -182,20 +195,80 @@ def hybrid_a_star(start: npt.NDArray[np.floating[Any]],
         return pos_ok and yaw_ok
     
     def _generate_rspath(node: Node) -> Optional[Node]:
-        """
-        Try to generate a Path from the current node directly to the goal using Reeds-Shepp curves,
-        which will speed up the search process when the node is close to the goal and heuristics
-        are not enough to guide the search.
-        """
-        return
-    
+        def check(path: RSPath) -> bool:
+            for x, y, yaw in zip(*path.coordinates_tuple()):
+                if Car(x, y, yaw).check_collision(obstacles):
+                    return False
+            return True
+
+        def calc_rspath_cost(path: RSPath) -> float:
+            last_direction = node.path.direction if not isinstance(node.path, RSPath) else 0
+            last_steer = node.path.steer if not isinstance(node.path, RSPath) else 0.0
+
+            distance_cost = 0.0
+            switch_direction_cost = 0.0
+            steer_change_cost = 0.0
+            steer_cost = 0.0
+
+            for seg in path.segments:
+                length = abs(seg.length)
+                distance_cost += length if seg.direction == 1 else length * BACKWARDS_COST
+                if last_direction != 0 and seg.direction != last_direction:
+                    switch_direction_cost += SWITCH_DIRECTION_COST
+                last_direction = seg.direction
+
+                steer = {"left": Car.TARGET_MAX_STEER,
+                        "right": -Car.TARGET_MAX_STEER,
+                        "straight": 0.0}.get(seg.type, 0.0)
+                steer_change_cost += STEER_CHANGE_COST * abs(steer - last_steer)
+                last_steer = steer
+                steer_cost += STEER_COST * abs(steer) * length
+
+            return distance_cost + switch_direction_cost + steer_change_cost + steer_cost
+
+        # 起点姿态用 _end_pose，兼容 RSPath/SimplePath
+        sx, sy, syaw = _end_pose(node)
+
+        # 生成所有 Reeds–Shepp 候选
+        paths = solve_rspath(
+            (sx, sy, syaw), tuple(goal),
+            Car.TARGET_MIN_TURNING_RADIUS,
+            MOTION_RESOLUTION
+        )
+
+        # 过滤碰撞
+        paths = filter(check, paths)
+        # 计算代价并取最优
+        best = None
+        best_cost = None
+        for p in paths:
+            c = calc_rspath_cost(p)
+            if (best is None) or (c < best_cost):
+                best, best_cost = p, c
+        if best is None:
+            return None
+
+        return Node(best, node.cost + best_cost, 0.0, node)
+
     def _reconstruct_path(node: Node) -> npt.NDArray[np.floating[Any]]:
         """
         Traceback the path from the goal to the start, to get the final trajectory
-
         returns [[x(m), y(m), yaw(rad), direction(1, -1)]]
-        """
-        return
+        """ 
+        segs = []
+        cur = node
+        while cur is not None:
+            if isinstance(cur.path, RSPath):
+                pts = np.array([[p.x, p.y, 0.0] for p in cur.path.waypoints()], float)  # 简化 yaw=0
+                dircol = np.full((pts.shape[0], 1), cur.parent.path.direction if cur.parent else 1, float)
+                segs.append(np.hstack([pts, dircol]))
+            else:
+                traj = cur.path.trajectory  # [N,3]
+                dircol = np.full((traj.shape[0], 1), cur.path.direction, float)
+                segs.append(np.hstack([traj, dircol]))
+            cur = cur.parent
+        segs.reverse()
+        return np.vstack(segs)  # [N,4]=x,y,yaw,dir
     
     def _end_pose(n:Node) -> tuple[float, float, float]:
         if isinstance(n.path, RSPath):
@@ -254,11 +327,15 @@ def hybrid_a_star(start: npt.NDArray[np.floating[Any]],
 
     while pq:
         curr = heapq.heappop(pq)
+        
+        if isinstance(curr.path, RSPath):
+            if cancel_callback is not None and bool(cancel_callback(curr)):
+                return None
+            return _reconstruct_path(curr)
 
         if cancel_callback is not None and bool(cancel_callback(curr)):
             return None
         
-
         curr_best = dp[curr.path.ijk]
         if (curr_best is not None) and (curr.cost > curr_best.cost):
             continue
@@ -274,7 +351,8 @@ def hybrid_a_star(start: npt.NDArray[np.floating[Any]],
             return _reconstruct_path(curr)
         
         # When close to the goal, first try Reeds–Shepp direct connection and push into the heap to speed up
-        if np.linalg.norm(curr.path.trajectory[-1, :2] - goal[:2]) <= REEDS_SHEPP_MAX_DISTANCE:
+        ex, ey, _ = _end_pose(curr)
+        if np.hypot(ex - goal[0], ey - goal[1]) <= REEDS_SHEPP_MAX_DISTANCE:
             if (rsnode := _generate_rspath(curr)) is not None:
                 if RETURN_RS_PATH_IMMEDIATELY:
                     return _reconstruct_path(rsnode)
