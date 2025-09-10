@@ -109,21 +109,14 @@ Where:
 
 #### Hard Constraints (Physical/Regulatory)
 1. Steering limit:
-$$|\delta_k| \le \delta_{\max}\,.$$
+$$|\delta_k| \le \delta_{\max}\$$
 2. Acceleration limit:
-$$
-|a_k| \le a_{\max}\,.
-$$
+$$|a_k| \le a_{\max}\$$
 3. Speed range:
-$$
-0 \le v_k \le v_{\max}\,.
-$$
+$$0 \le v_k \le v_{\max}\$$
 4. Lateral acceleration limit (critical!):
-$$
-\Bigl|a_{y,k}\Bigr|
-= \left|\frac{v_k^{2}\tan\delta_k}{L}\right|
-\le a_{y,\max}\,.
-$$
+$$\Bigl|a_{y,k}\Bigr| = \left|\frac{v_k^{2}\tan\delta_k}{L}\right|
+\le a_{y,\max}\ $$
 
 Commonly used **speed-dependent steering angle limit**:
 $$
