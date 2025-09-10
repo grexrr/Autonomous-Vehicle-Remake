@@ -109,9 +109,7 @@ Where:
 
 #### Hard Constraints (Physical/Regulatory)
 1. Steering limit:
-$$
-|\delta_k| \le \delta_{\max}\,.
-$$
+$$|\delta_k| \le \delta_{\max}\,.$$
 2. Acceleration limit:
 $$
 |a_k| \le a_{\max}\,.
