@@ -1,16 +1,17 @@
 import math, heapq
 from collections.abc import Callable, Generator
 from typing import Any, Literal, NamedTuple, Optional
-from rsplan import Path as RSPath
+from itertools import islice, product
 
 import numpy as np
 import numpy.typing as npt
-from modeling.car import Car
-from modeling.obstacles import ObstacleGrid, Obstacles
+from rsplan import Path as RSPath
 
 from ..constants import *
 from ..utils.wrap_angle import wrap_angle
 from ..utils.SupportsBool import SupportsBool
+from modeling.car import Car
+from modeling.obstacles import ObstacleGrid, Obstacles
 
 XY_GRID_RESOLUTION = 1.0  # [m]
 YAW_GRID_RESOLUTION = np.deg2rad(15.0)  # [rad]
@@ -73,6 +74,11 @@ def _heuristic_distance_field(grid: ObstacleGrid, goal_xy: tuple[float, float]) 
     dist = np.full((H, W), H_COLLISION_COST)
 
     gi, gj = grid.calc_index(goal_xy)
+    if not (0 <= gi < H and 0 <= gj < W):
+        return ObstacleGrid(grid.minx, grid.maxx, grid.miny, grid.maxy, grid.resolution, dist)
+    if grid.grid[gi, gj]:
+        return ObstacleGrid(grid.minx, grid.maxx, grid.miny, grid.maxy, grid.resolution, dist)
+    
     dist[gi, gj] = 0.0
     pq: list[tuple[float, tuple[int, int]]] = [(0.0, (gi, gj))]
 
@@ -128,59 +134,52 @@ def hybrid_a_star(start: npt.NDArray[np.floating[Any]],
         return i, j, k
     
     def rollout(curr: Node, direction: int, steer: float) -> Optional[Node]:
-        # Construct the car from the end pose of the parent node and set the control for this segment
-        x, y, yaw = curr.path.trajectory[-1, :3]
-        car = Car(float(x), float(y), float(yaw))
-        car.velocity = 1.0 * direction
-        car.steer = np.clip(steer, -Car.MAX_STEER, Car.MAX_STEER)  # or constants limit
+        "Generate a neighbour node of the current node, given the direction and steer angle"
 
-        # Integrate within the segment (one step per MOTION_RESOLUTION meters), checking for collisions along the way
-        steps = int(math.ceil(MOTION_DISTANCE / MOTION_RESOLUTION))
-        dt = MOTION_RESOLUTION / abs(car.velocity)
-        traj = []
-        for _ in range(steps):
-            car.update(dt, do_wrap_angle=True)
-            if car.check_collision(obstacles):
+        # Simulate the car movement for MOTION_DISTANCE, with a interval of MOTION_RESOLUTION,
+        # check if the car will collide with the obstacles during the movement
+        car = Car(*curr.path.trajectory[-1, :3], velocity=float(direction), steer=steer)
+        trajectory = []
+        for _ in range(int(MOTION_DISTANCE / MOTION_RESOLUTION)):
+            car.update(MOTION_RESOLUTION)
+            if not start_collided and car.check_collision(obstacles):
                 return None
-            traj.append([car.x, car.y, car.yaw])
+            trajectory.append([car.x, car.y, car.yaw])
 
-        traj = np.asarray(traj, dtype=float)
-
-        # Discretize to (i, j, k), discard if out of bounds/occupied
-        i, j, k = _calc_ijk(traj[-1, 0], traj[-1, 1], traj[-1, 2])
+        i, j, k = _calc_ijk(car.x, car.y, car.yaw)
         if not (0 <= i < N and 0 <= j < M):
-            # Printing once is enough here, don't spam every time
-            print(f"Out of grid: i={i}, j={j}")
-            return None
-        if obstacle_grid.grid[i, j]:
+            print(f"Out of grid, please add more obstacles to fill the boundary: {i=} {j=}")
             return None
 
-        # Calculate g increment (segment length + direction change/steering/steering change penalty)
-        dist_cost = MOTION_DISTANCE if direction == 1 else MOTION_DISTANCE * BACKWARDS_COST
-        switch_cost = SWITCH_DIRECTION_COST if (curr.path.direction != 0 and direction != curr.path.direction) else 0.0
+        # Calculate the cost from the start to this neighbour node
+        distance_cost = MOTION_DISTANCE if direction == 1 else MOTION_DISTANCE * BACKWARDS_COST
+        switch_direction_cost = (
+            SWITCH_DIRECTION_COST if curr.path.direction != 0 and direction != curr.path.direction else 0.0
+        )
+        steer_change_cost = STEER_CHANGE_COST * abs(steer - curr.path.steer)
         steer_cost = STEER_COST * abs(steer) * MOTION_DISTANCE
-        dsteer_cost = STEER_CHANGE_COST * (abs(steer - curr.path.steer) if curr.path.direction != 0 else 0.0)
-        g_cost = curr.cost + dist_cost + switch_cost + steer_cost + dsteer_cost
+        cost = curr.cost + distance_cost + switch_direction_cost + steer_change_cost + steer_cost
 
-        # Calculate h (distance + heading)
+        # Calculate the heuristic cost from this neighbour node to the goal
         h_dist_cost = H_DIST_COST * heuristic_grid.grid[i, j]
         h_yaw_cost = H_YAW_COST * abs(wrap_angle(goal[2] - car.yaw))
         h_cost = h_dist_cost + h_yaw_cost
 
-        # Package child node
-        child_path = SimplePath((i, j, k), traj, direction, float(steer))
-        return Node(child_path, g_cost, h_cost, curr)
+        return Node(SimplePath((i, j, k), np.array(trajectory), direction, steer), cost, h_cost, curr)
     
-
-    def _generate_neighbors(curr: Node) -> Generator[Node, None, None]:
+    def _generate_neighbors(curr: Node,) -> Generator[Node, None, None]:
         "Generate all possible neighbours of the current node"
+        nonlocal start_collided
+        for direction, steer in product([1, -1], STEER_COMMANDS):
+            if (res := rollout(curr, direction, steer)) is not None:
+                yield res
+        start_collided = False
         return 
     
     def _reached_goal(x: float, y:float, yaw:float) -> bool:
         pos_ok = np.hypot(x - goal[0], y - goal[1]) <= XY_GRID_RESOLUTION * 1.0
         yaw_ok = abs(wrap_angle(yaw - goal[2])) <= np.deg2rad(45)
         return pos_ok and yaw_ok
-    
     
     def _generate_rspath(node: Node) -> Optional[Node]:
         """
@@ -218,11 +217,11 @@ def hybrid_a_star(start: npt.NDArray[np.floating[Any]],
         mask = (xy[:-1] != xy[1:]).any(axis=1)
         start = start[np.concatenate(([True], mask))]
 
-        si, sj, sk = _calc_ijk(*start[-1, :3])  # last gesture ijk
+        start_i, start_j, start_k = _calc_ijk(*start[-1, :3])  # last gesture ijk
 
         # Normalize the "direction column" to retain only the sign (+1/-1)
         start[:, 3] = np.sign(start[0, 3])
-        start_dir   = int(start[0, 3])
+        start_dir = int(start[0, 3])
 
         # Estimate the initial steering angle (based on the change in orientation/arc length of the last two frames)
         if start.shape[0] >= 2:
@@ -251,7 +250,7 @@ def hybrid_a_star(start: npt.NDArray[np.floating[Any]],
 
     dp = np.empty((N, M, K), dtype=object)  # 与原作一致：dp[(i,j,k)] 存“当前最优的 Node”
     dp[:] = None
-    dp[si, sj, sk] = start_node
+    dp[start_i, start_j, start_k] = start_node
 
     while pq:
         curr = heapq.heappop(pq)

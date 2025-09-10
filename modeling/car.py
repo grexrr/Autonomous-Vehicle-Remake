@@ -31,12 +31,12 @@ class Car:
     SCAN_RADIUS = 15.0  # [m]
 
     
-    def __init__(self, x:float, y:float, yaw:float) -> None:
+    def __init__(self, x:float, y:float, yaw:float=0.0,velocity: float=0.0, steer:float=0.0) -> None:
         self.x = x                # [m]
         self.y = y                # [m]
         self.yaw = yaw            # [rad], [-pi, pi]
-        self.velocity = 0.0       # [m/s], [MIN_SPEED, MAX_SPEED]
-        self.steer = 0.0          # δ
+        self.velocity = velocity  # [m/s], [MIN_SPEED, MAX_SPEED]
+        self.steer = steer          # δ
 
     def update(self, dt, do_wrap_angle: bool = True) -> None:
         self.x += self.velocity * np.cos(self.yaw) * dt
