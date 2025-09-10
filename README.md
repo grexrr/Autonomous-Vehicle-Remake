@@ -120,12 +120,14 @@ $$\Bigl|a_{y,k}\Bigr| = \left|\frac{v_k^{2}\tan\delta_k}{L}\right|
 
 Commonly used **speed-dependent steering angle limit**:
 $$
+\begin{aligned}
 |\delta_k|
 \le
 \min\!\left(
 \delta_{\max},\;
 \arctan\!\frac{a_{y,\max}\,L}{\max(v_k^{2},\,\varepsilon)}
 \right).
+\end{aligned}
 $$
 > The faster you go, the smaller the allowable steering angle to prevent skidding.
 
@@ -135,9 +137,7 @@ This is a **constrained Quadratic Programming (QP)** problem.
 For linear solvability, **iterative linearization** is commonly used:
 1. Use the current "nominal trajectory" $(\bar{x}_k, \bar{u}_k)$ (can be the last solution or a zero-control rollout)
 2. Linearize the model at the nominal trajectory:
-   $$
-   x_{k+1} \approx A_k x_k + B_k u_k + C_k
-   $$
+   $$x_{k+1} \approx A_k x_k + B_k u_k + C_k$$
 3. Solve a QP (cost function + hard constraints)
 4. Roll out the solution $U$ to update the nominal trajectory
 5. Repeat 1–3 times (usually 1–3 iterations are sufficient)
