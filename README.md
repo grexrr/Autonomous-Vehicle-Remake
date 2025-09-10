@@ -77,107 +77,78 @@ while open is not empty:
 **Model Predictive Control (MPC)** is an advanced control strategy used in the local planning of autonomous vehicles. It involves predicting the future behavior of the vehicle over a defined prediction horizon and optimizing the control inputs to achieve desired objectives. MPC takes into account the vehicle's dynamics, constraints, and a reference trajectory to minimize tracking errors and ensure smooth control actions. By solving an optimization problem at each time step, MPC provides a sequence of control actions that guide the vehicle along the optimal path while respecting physical and regulatory constraints.
 
 #### Prediction Horizon
-Choose a prediction length **N** (e.g., 10 steps) and a step size **Δt** (your `LOCAL_PLANNER_DELTA_TIME`). The Local Planner only focuses on the next **N** steps at a time.
+Choose a prediction length $N$ (e.g., 10 steps) and a step size $\Delta t$ (your `LOCAL_PLANNER_DELTA_TIME`). The Local Planner only focuses on the next $N$ steps at a time.
 
 #### Vehicle Model (Kinematic Bicycle Model)
 Given:
-- **u_k = [a_k, δ_k]**: throttle/brake (longitudinal acceleration **a_k**) and front wheel steering angle **δ_k**
-- **L**: wheelbase (`Car.WHEEL_BASE`)
+- $u_k = [a_k, \delta_k]$: throttle/brake (longitudinal acceleration $a_k$) and front wheel steering angle $\delta_k$
+- $L$: wheelbase (`Car.WHEEL_BASE`)
 
 The discretized kinematic model is:
-
-```
-X_{k+1} = X_k + v_k * cos(ψ_k) * Δt
-Y_{k+1} = Y_k + v_k * sin(ψ_k) * Δt
-v_{k+1} = v_k + a_k * Δt
-ψ_{k+1} = ψ_k + (v_k/L) * tan(δ_k) * Δt
-```
+$$
+\begin{aligned}
+X_{k+1} &= X_k + v_k \cos\psi_k\,\Delta t \\
+Y_{k+1} &= Y_k + v_k \sin\psi_k\,\Delta t \\
+v_{k+1} &= v_k + a_k\,\Delta t \\
+\psi_{k+1} &= \psi_k + \frac{v_k}{L}\tan\delta_k\,\Delta t
+\end{aligned}
+$$
 
 #### Scoring (Objective Function)
 The goal is for the vehicle to follow the reference trajectory closely while maintaining smooth control actions:
-
-```
-J = Σ[k=0 to N] ||x_k - x_k^ref||²_Q + Σ[k=0 to N-1] ||u_k - u_k^ref||²_R + Σ[k=0 to N-2] ||Δu_k||²_RΔ
-```
+$$
+J=\sum_{k=0}^{N}\|x_k - x_k^{\mathrm{ref}}\|_Q^2 + \sum_{k=0}^{N-1}\|u_k - u_k^{\mathrm{ref}}\|_R^2 + \sum_{k=0}^{N-2}\|\Delta u_k\|_{R_\Delta}^2
+$$
 
 Where:
-- The first term: tracking error in position/orientation/velocity (usually **Y** and **ψ** have higher weights)
+- The first term: tracking error in position/orientation/velocity (usually $Y$ and $\psi$ have higher weights)
 - The second term: avoid sudden throttle or steering changes
 - The third term: change in control between consecutive frames, ensuring smoothness (avoiding "jerky steering")
 
 #### Hard Constraints (Physical/Regulatory)
 1. **Steering limit:**
-   ```
-   |δ| ≤ Car.MAX_STEER
-   ```
+   $$
+   |\delta| \le \texttt{Car.MAX\_STEER}
+   $$
 
 2. **Acceleration limit:**
-   ```
-   |a| ≤ Car.MAX_ACCEL
-   ```
+   $$
+   |a| \le \texttt{Car.MAX\_ACCEL}
+   $$
 
 3. **Speed range:**
-   ```
-   0 ≤ v ≤ Car.MAX_SPEED
-   ```
+   $$
+   0 \le v \le \texttt{Car.MAX\_SPEED}
+   $$
 
 4. **Lateral acceleration limit (critical!):**
-   ```
-   |a_y| = |(v² * tan(δ))/L| ≤ a_y,max
-   ```
+   $$
+   |a_y| = \left| \frac{v^2 \tan\delta}{L} \right| \le a_{y,\max}
+   $$
 
 **Commonly used speed-dependent steering angle limit:**
-```
-|δ| ≤ min(Car.MAX_STEER, arctan((a_y,max * L)/max(v², ε)))
-```
+$$
+|\delta| \le \min\left(
+\texttt{Car.MAX\_STEER},\;
+\arctan\frac{a_{y,\max}L}{\max(v^2,\varepsilon)}
+\right)
+$$
 > The faster you go, the smaller the allowable steering angle to prevent skidding.
 
 #### Solution (QP + Iterative Linearization)
 This is a **constrained Quadratic Programming (QP)** problem.
 
 For linear solvability, **iterative linearization** is commonly used:
-1. Use the current "nominal trajectory" **(x̄_k, ū_k)** (can be the last solution or a zero-control rollout)
+1. Use the current "nominal trajectory" $(\bar{x}_k, \bar{u}_k)$ (can be the last solution or a zero-control rollout)
 2. Linearize the model at the nominal trajectory:
-   ```
-   x_{k+1} ≈ A_k * x_k + B_k * u_k + C_k
-   ```
+   $$
+   x_{k+1} \approx A_k x_k + B_k u_k + C_k
+   $$
 3. Solve a QP (cost function + hard constraints)
-4. Roll out the solution **U** to update the nominal trajectory
+4. Roll out the solution $U$ to update the nominal trajectory
 5. Repeat 1–3 times (usually 1–3 iterations are sufficient)
 
 **Execution method:**
-- Execute only the first control **u_0** obtained from this optimization
+- Execute only the first control $u_0$ obtained from this optimization
 - Recalculate in the next step (rolling optimization)
 ```
-
-## Test-Demo
-
-### Collision Detection Test
-
-```bash
-python -m demo.demo_test_collision
-```
-Tests vehicle collision detection system with animated car movement. Shows real-time collision checking as the car moves through an obstacle environment with visual feedback.
-
-![Autonomous Vehicle Collision Detection Demo](./images/collision_demo_20250910_171221.gif)
-
-
-### Hybrid A* Path Planning
-
-```bash
-python -m demo.demo_hybridAstar_test
-```
-This is a complete demonstration of Hybrid A* path planning. It tests various scenarios, including diagonal navigation, goal orientation alignment, and corridor traversal, and visualizes the planned path results.
-
-#### Scenario 1: Diagonal Path Planning
-![Diagonal Path Planning](./images/hybrid_astar_diagonal_20250910_171714.gif)
-**Description:** The vehicle plans a diagonal path from the bottom left (5,5) to the top right (55,55). This demonstrates the Hybrid A* algorithm's pathfinding capability in a complex obstacle environment, where the vehicle needs to navigate around two vertical poles to reach the target position.
-
-#### Scenario 2: Goal Orientation Alignment
-![Goal Orientation Alignment](./images/hybrid_astar_diagonal_90_20250910_171808.gif)
-**Description:** Tests the algorithm's ability to handle terminal constraints. The vehicle starts from (5,5,0°) and the target position is (55,55,90°), requiring both position and orientation alignment. The algorithm achieves precise goal orientation alignment through a combination of forward and reverse maneuvers.
-
-#### Scenario 3: Corridor Navigation
-![Corridor Navigation](./images/hybrid_astar_corridor_20250910_171854.gif)
-
-**Description:** The vehicle navigates through a narrow corridor between two poles, from (30,8,90°) to (30,52,90°). This scenario tests the algorithm's path planning capability in constrained spaces, requiring precise vehicle control to avoid collisions.
