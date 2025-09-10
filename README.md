@@ -85,20 +85,20 @@ Given:
 - \(L\): wheelbase (`Car.WHEEL_BASE`)
 
 The discretized kinematic model is:
-\[
+$$
 \begin{aligned}
 X_{k+1} &= X_k + v_k \cos\psi_k\,\Delta t \\
 Y_{k+1} &= Y_k + v_k \sin\psi_k\,\Delta t \\
 v_{k+1} &= v_k + a_k\,\Delta t \\
 \psi_{k+1} &= \psi_k + \frac{v_k}{L}\tan\delta_k\,\Delta t
 \end{aligned}
-\]
+$$
 
 #### Scoring (Objective Function)
 The goal is for the vehicle to follow the reference trajectory closely while maintaining smooth control actions:
-\[
+$$
 J=\sum_{k=0}^{N}\|x_k - x_k^{\mathrm{ref}}\|_Q^2 + \sum_{k=0}^{N-1}\|u_k - u_k^{\mathrm{ref}}\|_R^2 + \sum_{k=0}^{N-2}\|\Delta u_k\|_{R_\Delta}^2
-\]
+$$
 
 Where:
 - The first term: tracking error in position/orientation/velocity (usually \(Y\) and \(\psi\) have higher weights)
@@ -107,29 +107,29 @@ Where:
 
 #### Hard Constraints (Physical/Regulatory)
 1. Steering limit:
-\[
+$$
 |\delta| \le \texttt{Car.MAX\_STEER}
-\]
+$$
 2. Acceleration limit:
-\[
+$$
 |a| \le \texttt{Car.MAX\_ACCEL}
-\]
+$$
 3. Speed range:
-\[
+$$
 0 \le v \le \texttt{Car.MAX\_SPEED}
-\]
+$$
 4. Lateral acceleration limit (critical!):
-\[
+$$
 |a_y| = \left| \frac{v^2 \tan\delta}{L} \right| \le a_{y,\max}
-\]
+$$
 
 Commonly used **speed-dependent steering angle limit**:
-\[
+$$
 |\delta| \le \min\left(
 \texttt{Car.MAX\_STEER},\;
 \arctan\frac{a_{y,\max}L}{\max(v^2,\varepsilon)}
 \right)
-\]
+$$
 > The faster you go, the smaller the allowable steering angle to prevent skidding.
 
 #### Solution (QP + Iterative Linearization)
@@ -138,9 +138,9 @@ This is a **constrained Quadratic Programming (QP)** problem.
 For linear solvability, **iterative linearization** is commonly used:
 1. Use the current "nominal trajectory" \((\bar{x}_k, \bar{u}_k)\) (can be the last solution or a zero-control rollout)
 2. Linearize the model at the nominal trajectory:
-   \[
+   $$
    x_{k+1} \approx A_k x_k + B_k u_k + C_k
-   \]
+   $$
 3. Solve a QP (cost function + hard constraints)
 4. Roll out the solution \(U\) to update the nominal trajectory
 5. Repeat 1–3 times (usually 1–3 iterations are sufficient)
