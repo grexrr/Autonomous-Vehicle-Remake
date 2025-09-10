@@ -2,7 +2,7 @@
 import numpy as np, matplotlib.pyplot as plt
 from modeling.obstacles import Obstacles
 from modeling.car import Car
-from global_planner.hybrid_a_star import _distance_field
+from global_planner.hybrid_a_star import _heuristic_distance_field
 
 def make_test_obstacles():
     pts=[]
@@ -18,7 +18,7 @@ r = min(Car.COLLISION_LENGTH, Car.COLLISION_WIDTH)/2
 grid = obs.downsampling_to_grid(RES, r)
 
 goal = (55.0, 55.0)
-heur = _distance_field(grid, goal)
+heur = _heuristic_distance_field(grid, goal)
 
 # —— 可视化距离场（更清晰的版本）——
 fig, ax = plt.subplots()

@@ -18,7 +18,18 @@ class Car:
     COLLISION_LENGTH = LENGTH + 2.0
     COLLISION_WIDTH = WIDTH + 2.0
     COLLISION_RADIUS = float(np.hypot(COLLISION_LENGTH/2, COLLISION_WIDTH/2))
+
+    AX_STEER = np.deg2rad(40.0)  # [rad]
+    TARGET_MAX_STEER = np.deg2rad(35.0)  # [rad], for global planner
     
+    MAX_CENTRIPETAL_ACCEL = 16.0  # [m/ss]
+
+    TARGET_SPEED = 40.0 / 3.6  # [m/s]
+
+    TARGET_MIN_TURNING_RADIUS = WHEEL_BASE / np.tan(TARGET_MAX_STEER)  # [m], for global planner
+
+    SCAN_RADIUS = 15.0  # [m]
+
     
     def __init__(self, x:float, y:float, yaw:float) -> None:
         self.x = x                # [m]
