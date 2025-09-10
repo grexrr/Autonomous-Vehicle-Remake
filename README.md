@@ -72,80 +72,114 @@ while open is not empty:
         heappush(open, child)
 ```
 
-### Local Planner (MPC)
+# Local Planner (MPC)
 
-**Model Predictive Control (MPC)** is an advanced control strategy used in the local planning of autonomous vehicles. It involves predicting the future behavior of the vehicle over a defined prediction horizon and optimizing the control inputs to achieve desired objectives. MPC takes into account the vehicle's dynamics, constraints, and a reference trajectory to minimize tracking errors and ensure smooth control actions. By solving an optimization problem at each time step, MPC provides a sequence of control actions that guide the vehicle along the optimal path while respecting physical and regulatory constraints.
+**Model Predictive Control（MPC）** 用来把全局路径（如 Hybrid A* 的 \([x,y,\psi]\) 点列）转换成每一帧可执行的**油门/刹车 + 转向**指令；它在给定预测域内，考虑车辆动力学与约束，优化控制序列，使车辆**平滑且受限**地跟踪参考路线。每个控制周期只执行求得序列的**第一步**，然后滚动重复。
 
-#### Prediction Horizon
-Choose a prediction length \(N\) (e.g., 10 steps) and a step size \(\Delta t\) (your `LOCAL_PLANNER_DELTA_TIME`). The Local Planner only focuses on the next \(N\) steps at a time.
+---
 
-#### Vehicle Model (Kinematic Bicycle Model)
-Given:
-- \(u_k = [a_k, \delta_k]\): throttle/brake (longitudinal acceleration \(a_k\)) and front wheel steering angle \(\delta_k\)
-- \(L\): wheelbase (`Car.WHEEL_BASE`)
+## 预测域（Prediction Horizon）
 
-The discretized kinematic model is:
-$$\begin{aligned}
+选择预测步长 \(N\)（比如 10）与离散步距 \(\Delta t\)（你的 `LOCAL_PLANNER_DELTA_TIME`）。  
+MPC 每次只优化**未来 \(N\) 步**。
+
+---
+
+## 车辆模型（Kinematic Bicycle，离散）
+
+控制量 \(u_k=[a_k,\delta_k]\)（纵向加速度与前轮转角），轴距 \(L\)（`Car.WHEEL_BASE`）。离散动力学为：
+
+$$
+\begin{aligned}
 X_{k+1} &= X_k + v_k \cos\psi_k\,\Delta t \\
 Y_{k+1} &= Y_k + v_k \sin\psi_k\,\Delta t \\
 v_{k+1} &= v_k + a_k\,\Delta t \\
 \psi_{k+1} &= \psi_k + \frac{v_k}{L}\tan\delta_k\,\Delta t
-\end{aligned}$$
-
-#### Scoring (Objective Function)
-The goal is for the vehicle to follow the reference trajectory closely while maintaining smooth control actions:
-$$
-J=\sum_{k=0}^{N}\|x_k - x_k^{\mathrm{ref}}\|_Q^2 + \sum_{k=0}^{N-1}\|u_k - u_k^{\mathrm{ref}}\|_R^2 + \sum_{k=0}^{N-2}\|\Delta u_k\|_{R_\Delta}^2
+\end{aligned}
 $$
 
-Where:
-- The first term: tracking error in position/orientation/velocity (usually \(Y\) and \(\psi\) have higher weights)
-- The second term: avoid sudden throttle or steering changes
-- The third term: change in control between consecutive frames, ensuring smoothness (avoiding "jerky steering")
+状态 \(x_k=[X_k, Y_k, v_k, \psi_k]^\top\)。
 
-#### Hard Constraints (Physical/Regulatory)
-1. Steering limit:
-$$
-|\delta| \le \texttt{Car.MAX\_STEER}
-$$
-2. Acceleration limit:
-$$
-|a| \le \texttt{Car.MAX\_ACCEL}
-$$
-3. Speed range:
-$$
-0 \le v \le \texttt{Car.MAX\_SPEED}
-$$
-4. Lateral acceleration limit (critical!):
-\[
-|a_y| = \left| \frac{v^2 \tan\delta}{L} \right| \le a_{y,\max}
-\]
+---
 
-Commonly used **speed-dependent steering angle limit**:
-\[
-|\delta| \le \min\left(
-\texttt{Car.MAX\_STEER},\;
-\arctan\frac{a_{y,\max}L}{\max(v^2,\varepsilon)}
-\right)
-\]
-> The faster you go, the smaller the allowable steering angle to prevent skidding.
+## 目标函数（Tracking + Smoothness）
 
-#### Solution (QP + Iterative Linearization)
-This is a **constrained Quadratic Programming (QP)** problem.
+在预测域内最小化**跟踪误差**与**控制平滑度**：
 
-For linear solvability, **iterative linearization** is commonly used:
-1. Use the current "nominal trajectory" \((\bar{x}_k, \bar{u}_k)\) (can be the last solution or a zero-control rollout)
-2. Linearize the model at the nominal trajectory:
-   \[
-   x_{k+1} \approx A_k x_k + B_k u_k + C_k
-   \]
-3. Solve a QP (cost function + hard constraints)
-4. Roll out the solution \(U\) to update the nominal trajectory
-5. Repeat 1–3 times (usually 1–3 iterations are sufficient)
+$$
+J
+= \sum_{k=0}^{N}\lVert x_k - x_k^{\mathrm{ref}}\rVert_{Q}^{2}
++ \sum_{k=0}^{N-1}\lVert u_k - u_k^{\mathrm{ref}}\rVert_{R}^{2}
++ \sum_{k=0}^{N-2}\lVert \Delta u_k\rVert_{R_\Delta}^{2}\,,
+$$
 
-Execution method:
-- Execute only the first control \(u_0\) obtained from this optimization
-- Recalculate in the next step (rolling optimization)
+其中 \(\Delta u_k = u_{k+1}-u_k\)。常见做法是对横向位置 \(Y\) 与航向 \(\psi\) 赋较大权重，对控制增量赋平滑权重。
+
+---
+
+## 硬约束（Physical/Regulatory Constraints）
+
+转角限制（与机械极限一致）：
+$$
+|\delta_k| \le \delta_{\max}\,.
+$$
+
+加速度限制：
+$$
+|a_k| \le a_{\max}\,.
+$$
+
+速度范围：
+$$
+0 \le v_k \le v_{\max}\,.
+$$
+
+**横向加速度限制（关键）**：
+$$
+\Bigl|a_{y,k}\Bigr|
+= \left|\frac{v_k^{2}\tan\delta_k}{L}\right|
+\le a_{y,\max}\,.
+$$
+
+实践中常用**速度相关的转角上限**来近似实现横向加速度约束：
+$$
+|\delta_k|
+\le
+\min\!\left(
+\delta_{\max},\;
+\arctan\!\frac{a_{y,\max}\,L}{\max(v_k^{2},\,\varepsilon)}
+\right),
+$$
+
+> 直觉：车速越高，安全可用的瞬时转角就越小，避免侧滑或失稳。
+
+---
+
+## 求解方法（QP + 迭代线性化）
+
+将非线性模型在名义轨迹 \((\bar{x}_k,\bar{u}_k)\) 处线性化为：
+$$
+x_{k+1} \approx A_k\,x_k + B_k\,u_k + C_k\,,
+$$
+
+把目标函数写成二次型、约束写成线性/盒约束，即得到**带约束二次规划（QP）**。每个控制周期执行：
+
+1. **构造参考**：从全局路径上找当前最近点，沿弧长/时间取 \(N{+}1\) 个参考状态 \(x_k^{\mathrm{ref}}\) 与（可选）\(u_k^{\mathrm{ref}}\)。
+2. **线性化**：在名义轨迹上计算 \((A_k,B_k,C_k)\)。
+3. **求解 QP**：最小化 \(J\)，满足动力学等式与上述硬约束。
+4. **执行**：只下发第一帧控制 \(u_0\)，其余作废。
+5. **滚动**：用解出的控制更新名义轨迹，下一拍重复 1–4。
+
+---
+
+## 实用提示
+
+- **航向展开**：参考与实车的 \(\psi\) 建议用“角度展开”（unwrap）避免 \(-\pi/\pi\) 跳变导致误差暴涨。  
+- **速度相关转角上限**：高效且稳定，强烈建议启用。  
+- **参考窗口**：始终从“最近点”向前取 \(N\) 步参考，避免盯着历史点“回头看”。  
+- **权重初值**：可从 \(Q=\mathrm{diag}(3,6,0.5,2)\)、\(R=\mathrm{diag}(0.2,0.3)\)、\(R_\Delta=\mathrm{diag}(0.1,1.0)\) 起步，再按误差与抖动调优。
+
+---
 
 
 ## Test-Demo
