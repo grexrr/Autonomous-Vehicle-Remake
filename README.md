@@ -33,7 +33,12 @@ Requires Python 3.12 or later.
 pip install -r requirements.txt
 ```
 
-### macOS Specific Setup
+## Launching
+
+```bash
+python -m AutonomousVehicle
+```
+launches the main app. 
 
 If you encounter the following error on macOS:
 
@@ -41,7 +46,7 @@ If you encounter the following error on macOS:
 
 This is a common issue with PySide6 on macOS in virtual environments. Follow these steps to fix it:
 
-This is a common issue with PySide6 on macOS in virtual environments. Follow these steps to fix it:
+#### Method1 (Manual Fix) ####
 
 1. **Install a compatible PySide6 version:**
    ```bash
@@ -65,6 +70,14 @@ This is a common issue with PySide6 on macOS in virtual environments. Follow the
 - If you still get errors, try recreating your virtual environment
 - Make sure you're running the commands from the project root directory
 - For system-wide Python installations, you may need to use `sudo` with `install_name_tool`
+
+#### Method2 (Recommended)####
+
+Or you can launch the `start_app` script instead should automatically fix the issue: 
+
+```bash
+python start_app.py
+```
 
 
 ## Core Algorithm
