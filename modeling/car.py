@@ -1,6 +1,7 @@
 #Front-wheel Steering Model (Kinematic Bicycle Model)
 import numpy as np
 from utils.wrap_angle import wrap_angle
+from .obstacles import Obstacles
 
 class Car:
 
@@ -65,18 +66,23 @@ class Car:
         return Car(self.x, self.y, self.yaw, self.velocity, self.steer)
 
 
-    def check_collision(self, obstacles) -> bool:
-        pts = obstacles.coordinates
-        if pts.size == 0:
-            return False
+    def check_collision(self, obstacles: Obstacles | np.ndarray) -> bool:
+        "Check if the car collides with any obstacles in the given `Obstacles` instance."
 
-        cos, sin = np.cos(self.yaw), np.sin(self.yaw)
-        cx = self.x + self.BACK_TO_CENTER * cos
-        cy = self.y + self.BACK_TO_CENTER * sin
-        ids = obstacles.kd_tree.query_ball_point([cx, cy], self.COLLISION_RADIUS)
-        
-        candidates = obstacles.coordinates[ids]
-        candidates = (candidates - [cx, cy]) @ np.array([[cos, sin], [-sin, cos]])
+        # calculate the center of the car, since (self.x, self.y) represents the coordinate of the middle of the rear wheels
+        c, s = np.cos(self.yaw), np.sin(self.yaw)
+        center_x, center_y = self.x + self.BACK_TO_CENTER * c, self.y + self.BACK_TO_CENTER * s
+
+        if isinstance(obstacles, Obstacles):
+            # query the obstacles within the collision radius
+            ids = obstacles.kd_tree.query_ball_point([center_x, center_y], self.COLLISION_RADIUS)
+            candidates = obstacles.coordinates[ids]
+        else:
+            # the input is already the coordinates of the obstacles
+            candidates = obstacles
+
+        # translate and then rotate the coordinates of the obstacles to the car's local frame, to facilitate checking
+        candidates = (candidates - [center_x, center_y]) @ np.array([[c, -s], [s, c]])
 
         return np.any(
             np.logical_and(

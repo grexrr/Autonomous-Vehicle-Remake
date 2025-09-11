@@ -122,8 +122,8 @@ def main(save_gif=True):
         os.makedirs("images", exist_ok=True)
         
         # 生成GIF文件名(带时间戳)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        gif_filename = f"images/collision_demo_{timestamp}.gif"
+        # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        gif_filename = f"images/collision_demo.gif"
         
         print(f"正在生成GIF动画: {gif_filename}")
         

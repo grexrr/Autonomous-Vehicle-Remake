@@ -7,6 +7,48 @@ This project is a learning project for an autonomous driving path planning syste
 - To deeply understand the algorithm principles and implementation details, I am now independently redoing the entire project
 - Focus on learning the application of the Hybrid A* Algorithm in vehicle motion planning with non-holonomic constraints
 
+## Dependencies
+
+Requires Python 3.12 or later.
+
+```bash
+pip install -r requirements.txt
+```
+
+### macOS Specific Setup
+
+If you encounter the following error on macOS:
+
+```qt.qpa.plugin: Could not find the Qt platform plugin "cocoa" in "" This application failed to start because no Qt platform plugin could be initialized.```
+
+This is a common issue with PySide6 on macOS in virtual environments. Follow these steps to fix it:
+
+This is a common issue with PySide6 on macOS in virtual environments. Follow these steps to fix it:
+
+1. **Install a compatible PySide6 version:**
+   ```bash
+   pip install PySide6==6.8.0
+   ```
+
+2. **Fix the Qt plugin rpath:**
+   ```bash
+   install_name_tool -add_rpath "$(pwd)/.venv/lib/python$(python -c 'import sys; print(sys.version_info.major, sys.version_info.minor, sep=".")')/site-packages/PySide6/Qt/lib" .venv/lib/python$(python -c 'import sys; print(sys.version_info.major, sys.version_info.minor, sep=".")')/site-packages/PySide6/Qt/plugins/platforms/libqcocoa.dylib
+   ```
+
+3. **Test the application:**
+   ```bash
+   python -m your_module_name
+   ```
+
+**Why this happens:** PySide6 6.9.x has known issues with macOS virtual environments. Using version 6.8.0 with proper rpath configuration resolves the plugin loading issue.
+   
+
+**Troubleshooting:**
+- If you still get errors, try recreating your virtual environment
+- Make sure you're running the commands from the project root directory
+- For system-wide Python installations, you may need to use `sudo` with `install_name_tool`
+
+
 ## Core Algorithm
 
 In autonomous driving systems, path planning is typically divided into two levels: **Global Planner** and **Local Planner**. These two levels work together, each with its own responsibilities, to achieve safe and efficient vehicle autonomous navigation.
@@ -160,14 +202,14 @@ python -m demo.test_hybridAstar
 This is a complete demonstration of Hybrid A* path planning. It tests various scenarios, including diagonal navigation, goal orientation alignment, and corridor traversal, and visualizes the planned path results.
 
 #### Scenario 1: Diagonal Path Planning
-![Diagonal Path Planning](./test_output/hybrid_astar_diagonal_20250910_171714.gif)
+![Diagonal Path Planning](./test_output/hybrid_astar_diagonal.gif)
 **Description:** The vehicle plans a diagonal path from the bottom left (5,5) to the top right (55,55). This demonstrates the Hybrid A* algorithm's pathfinding capability in a complex obstacle environment, where the vehicle needs to navigate around two vertical poles to reach the target position.
 
 #### Scenario 2: Goal Orientation Alignment
-![Goal Orientation Alignment](./test_output/hybrid_astar_diagonal_90_20250910_171808.gif)
+![Goal Orientation Alignment](./test_output/hybrid_astar_diagonal_90.gif)
 **Description:** Tests the algorithm's ability to handle terminal constraints. The vehicle starts from (5,5,0°) and the target position is (55,55,90°), requiring both position and orientation alignment. The algorithm achieves precise goal orientation alignment through a combination of forward and reverse maneuvers.
 
 #### Scenario 3: Corridor Navigation
-![Corridor Navigation](./test_output/hybrid_astar_corridor_20250911_105831.gif)
+![Corridor Navigation](./test_output/hybrid_astar_corridor.gif)
 
 **Description:** The vehicle navigates through a narrow corridor between two poles, from (30,8,90°) to (30,52,90°). This scenario tests the algorithm's path planning capability in constrained spaces, requiring precise vehicle control to avoid collisions.

@@ -6,12 +6,10 @@ import matplotlib.animation as animation
 import os
 from datetime import datetime
 
-# === 按你的项目结构调整这三行 ===
 from modeling.obstacles import Obstacles
 from modeling.car import Car
 import global_planner.hybrid_a_star as hb
 
-# 可选: 统一随机数种子，便于复现
 np.random.seed(0)
 
 # ---------- 1) 造障碍 ----------
@@ -180,8 +178,8 @@ def run_case_animated(start, goal, obstacles, title="Hybrid A* demo", save_gif=T
         os.makedirs("images", exist_ok=True)
         
         # 生成GIF文件名
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        gif_filename = f"images/hybrid_astar_{case_name}_{timestamp}.gif"
+        # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        gif_filename = f"images/hybrid_astar_{case_name}.gif"
         
         print(f"正在生成GIF动画: {gif_filename}")
         

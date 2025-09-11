@@ -13,7 +13,7 @@ from utils.wrap_angle import smooth_yaw
 NEARIST_POINT_SEARCH_RANGE = 20.0  # [m]
 NEARIST_POINT_SEARCH_STEP = 0.1  # [m]
 
-HORIZON_LENGTH = 5  # simulate count
+HORIZON_LENGTH = 3  # simulate count
 MIN_HORIZON_DISTANCE = 0.3  # [m]
 
 MAX_ITER = 5
@@ -45,6 +45,9 @@ def _get_linear_model_matrix(
     >>> X[t+dt] = A @ X[t] + B @ u[t] + C
     where X[t] = [x, y, v, yaw], u[t] = [accel, steer] of timestamp t.
     """
+    # 限制 steer 角度以避免数值问题
+    steer = np.clip(steer, -Car.MAX_STEER * 0.9, Car.MAX_STEER * 0.9)
+    
     # Note: ndarrays in this function are transposed
     sy, cy, cs = np.sin(yaw), np.cos(yaw), np.cos(steer)
     A = np.zeros((NX, NX))
@@ -78,6 +81,111 @@ def _predict_motion(state: Car, controls: npt.NDArray[np.floating[Any]], dt: flo
         state.update_with_control(state.velocity + acceleration * dt, steer, dt, do_wrap_angle=False)
         states.append([state.x, state.y, state.velocity, state.yaw])
     return np.array(states)
+
+
+def _linear_mpc_control(
+    xref: npt.NDArray[np.floating[Any]],  # shape=(NX, H+1)
+    xbar: npt.NDArray[np.floating[Any]],  # shape=(NX, H+1)
+    last_steer: float,
+    dt: float
+) -> Optional[tuple[npt.NDArray[np.floating[Any]], npt.NDArray[np.floating[Any]]]]:
+    """
+    线性化的 MPC 子问题（纯二次目标 + 线性等/不等式约束），
+    使用 OSQP 求解；把所有 |.| 约束改成线性上下界，保证是 QP。
+    """
+    H = HORIZON_LENGTH
+
+    # 变量
+    x = cvxpy.Variable((NX, H + 1))  # [x, y, v, yaw]
+    u = cvxpy.Variable((NU, H))      # [accel, steer]
+
+    cost = 0.0
+    cons = []
+
+    # 动力学 & 运行代价
+    for t in range(H):
+        # 控制代价
+        cost += cvxpy.quad_form(u[:, t], R)
+        if t != 0:
+            # 状态跟踪代价
+            cost += cvxpy.quad_form(xref[:, t] - x[:, t], Q)
+
+        # 线性化的离散模型：x_{t+1} = A x_t + B u_t + C
+        # 添加数值稳定性检查
+        velocity = float(xbar[2, t])
+        yaw = float(xbar[3, t])
+        steer = float(last_steer)
+        
+        # 限制 steer 角度以避免数值问题
+        steer = np.clip(steer, -Car.MAX_STEER * 0.9, Car.MAX_STEER * 0.9)
+        
+        A, B, C = _get_linear_model_matrix(velocity, yaw, steer, dt)
+        cons += [x[:, t + 1] == A @ x[:, t] + B @ u[:, t] + C]
+
+    # 末端代价
+    cost += cvxpy.quad_form(xref[:, H] - x[:, H], Q_F)
+
+    # 初值约束
+    cons += [x[:, 0] == xbar[:, 0]]
+
+    # 速度上下界
+    cons += [x[2, :] <= Car.MAX_SPEED, x[2, :] >= Car.MIN_SPEED]
+
+    # 加速度上下界（线性上下界）
+    cons += [u[0, :] <= Car.MAX_ACCEL, u[0, :] >= -Car.MAX_ACCEL]
+
+    # 转角上下界
+    cons += [u[1, :] <= Car.MAX_STEER, u[1, :] >= -Car.MAX_STEER]
+
+    # 转角变化速率约束
+    if ALLOW_STEER_CHANGE_ON_FIRST_POINT:
+        d0 = u[1, 0] - last_steer
+        lim0 = Car.MAX_STEER_SPEED * dt
+        # 给第一步的转角变化一个二次代价（可选）
+        cost += (d0 / dt) * R_D[1, 1] * (d0 / dt)
+        cons += [-lim0 <= d0, d0 <= lim0]
+    else:
+        cons += [u[1, 0] == last_steer]
+
+    for t in range(1, H):
+        d = u[1, t] - u[1, t - 1]
+        lim = Car.MAX_STEER_SPEED * dt
+        cons += [-lim <= d, d <= lim]  # 线性上下界，替代 abs()
+        # 控制增量代价
+        du_vec = (u[:, t] - u[:, t - 1]) / dt
+        cost += cvxpy.quad_form(du_vec, R_D)
+
+    # 求解：OSQP（QP 的首选）
+    prob = cvxpy.Problem(cvxpy.Minimize(cost), cons)
+    
+    # 添加求解器参数以提高稳定性
+    solver_params = {
+        'warm_start': True,
+        'verbose': False,
+        'max_iter': 10000,
+        'eps_abs': 1e-6,
+        'eps_rel': 1e-6,
+        'polish': True,
+        'adaptive_rho': True
+    }
+    
+    try:
+        prob.solve(solver=cvxpy.OSQP, **solver_params)
+    except Exception as e:
+        print(f"OSQP failed: {e}")
+        # 兜底：如果没装 OSQP，就试 Clarabel/ECOS
+        for s in (cvxpy.CLARABEL, cvxpy.ECOS):
+            try:
+                prob.solve(solver=s, warm_start=True, verbose=False)
+                break
+            except Exception:
+                continue
+
+    if prob.status not in (cvxpy.OPTIMAL, cvxpy.OPTIMAL_INACCURATE):
+        print(f"Error: Cannot solve mpc: {prob.status}")
+        return None
+
+    return u.value, x.value
 
 
 # def _linear_mpc_control(
@@ -141,92 +249,6 @@ def _predict_motion(state: Car, controls: npt.NDArray[np.floating[Any]], dt: flo
 #         print(f"Error: Cannot solve mpc: {prob.status}")
 #         return None
 #     return u.value, x.value
-
-def _linear_mpc_control(
-    xref: npt.NDArray[np.floating[Any]],  # shape=(NX, H+1)
-    xbar: npt.NDArray[np.floating[Any]],  # shape=(NX, H+1)
-    last_steer: float,
-    dt: float
-) -> Optional[tuple[npt.NDArray[np.floating[Any]], npt.NDArray[np.floating[Any]]]]:
-    """
-    线性化的 MPC 子问题（纯二次目标 + 线性等/不等式约束），
-    使用 OSQP 求解；去掉了 |.| 形式的约束，全部改成线性上下界，便于 QP。
-    """
-    H = HORIZON_LENGTH
-
-    # 变量
-    x = cvxpy.Variable((NX, H + 1))  # [x, y, v, yaw]
-    u = cvxpy.Variable((NU, H))      # [accel, steer]
-
-    cost = 0.0
-    cons = []
-
-    # 动力学 & 运行代价
-    for t in range(H):
-        # 控制代价
-        cost += cvxpy.quad_form(u[:, t], R)
-        if t != 0:
-            # 状态跟踪代价
-            cost += cvxpy.quad_form(xref[:, t] - x[:, t], Q)
-
-        # 线性化的离散模型：x_{t+1} = A x_t + B u_t + C
-        A, B, C = _get_linear_model_matrix(xbar[2, t], xbar[3, t], last_steer, dt)
-        cons += [x[:, t + 1] == A @ x[:, t] + B @ u[:, t] + C]
-
-    # 末端代价
-    cost += cvxpy.quad_form(xref[:, H] - x[:, H], Q_F)
-
-    # 初值约束
-    cons += [x[:, 0] == xbar[:, 0]]
-
-    # 速度上下界（对所有时刻）
-    cons += [x[2, :] <= Car.MAX_SPEED, x[2, :] >= Car.MIN_SPEED]
-
-    # 加速度上下界（把 |a|<=a_max 改成线性上下界）
-    cons += [u[0, :] <= Car.MAX_ACCEL, u[0, :] >= -Car.MAX_ACCEL]
-
-    # 转角上下界（同理）
-    cons += [u[1, :] <= Car.MAX_STEER, u[1, :] >= -Car.MAX_STEER]
-
-    # 转角变化速率约束
-    # t=0：要么固定为 last_steer，要么限制变化量 |δ0-δ_last|<= δ_rate*dt（也改成线性上下界）
-    if ALLOW_STEER_CHANGE_ON_FIRST_POINT:
-        d0 = u[1, 0] - last_steer
-        lim0 = Car.MAX_STEER_SPEED * dt
-        # 用 R_D 的 steer 分量给一次“变化惩罚”
-        cost += (d0 / dt) * R_D[1, 1] * (d0 / dt)
-        cons += [-lim0 <= d0, d0 <= lim0]
-    else:
-        cons += [u[1, 0] == last_steer]
-
-    # t>=1：|δ_t - δ_{t-1}| <= δ_rate*dt  ->  -lim <= diff <= lim
-    for t in range(1, H):
-        d = u[1, t] - u[1, t - 1]
-        lim = Car.MAX_STEER_SPEED * dt
-        cons += [-lim <= d, d <= lim]
-        # 控制增量代价
-        du_vec = (u[:, t] - u[:, t - 1]) / dt
-        cost += cvxpy.quad_form(du_vec, R_D)
-
-    # 求解：OSQP（对二次规划更快、更稳定）
-    prob = cvxpy.Problem(cvxpy.Minimize(cost), cons)
-    try:
-        prob.solve(solver=cvxpy.OSQP, warm_start=True, verbose=False)
-    except Exception:
-        # 若 OSQP 没装，退而求其次试试 CLARABEL/ECOS
-        for s in (cvxpy.CLARABEL, cvxpy.ECOS):
-            try:
-                prob.solve(solver=s, warm_start=True, verbose=False)
-                break
-            except Exception:
-                continue
-
-    if prob.status not in (cvxpy.OPTIMAL, cvxpy.OPTIMAL_INACCURATE):
-        print(f"Error: Cannot solve mpc: {prob.status}")
-        return None
-
-    return u.value, x.value
-
 
 
 def _get_curvature(
