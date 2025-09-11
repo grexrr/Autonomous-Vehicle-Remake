@@ -13,7 +13,7 @@ from .modeling.car import Car
 from .modeling.obstacles import Obstacles
 
 READ_FROM_FILE = True
-MAP_FILE = Path(__file__).absolute().parent / "map" / "map.png"
+MAP_FILE = Path(__file__).absolute().parent / "map" / "map2.png"
 METER_PER_PIXEL = 0.1
 
 

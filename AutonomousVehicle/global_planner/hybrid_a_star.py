@@ -729,8 +729,8 @@ from rsplan import Path as RSPath
 from rsplan.planner import _solve_path as solve_rspath
 
 from ..constants import *
-from ..modeling.Car import Car
-from ..modeling.Obstacles import ObstacleGrid, Obstacles
+from ..modeling.car import Car
+from ..modeling.obstacles import ObstacleGrid, Obstacles
 from ..utils.SupportsBool import SupportsBool
 from ..utils.wrap_angle import wrap_angle
 
@@ -962,6 +962,7 @@ def hybrid_a_star(
                 # RSPath contains the start point, so we skip it using islice
                 segments.append([[p.x, p.y, p.yaw, p.driving_direction] for p in islice(path.waypoints(), 1, None)])
             node = node.parent
+
         segments.reverse()
         trajectory = np.vstack(segments)
 
