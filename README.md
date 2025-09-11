@@ -7,7 +7,7 @@ This project is a learning project for an autonomous driving path planning syste
 - To deeply understand the algorithm principles and implementation details, I am now independently redoing the entire project
 - Focus on learning the application of the Hybrid A* Algorithm in vehicle motion planning with non-holonomic constraints
 
-![Route Planning Demo](./test_output/0911_1.gif)
+![Route Planning Demo](./test_output/0911_2.gif)
 
 **Project Overview:** Developed a comprehensive autonomous driving path planning system based on Hybrid A* Algorithm and Model Predictive Control (MPC), implementing a two-tier architecture with Global Planner and Local Planner
 
