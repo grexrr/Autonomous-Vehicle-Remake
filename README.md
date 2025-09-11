@@ -145,29 +145,29 @@ Execution method:
 ### Collision Detection Test
 
 ```bash
-python -m demo.demo_test_collision
+python -m demo.test_collision
 ```
 Tests vehicle collision detection system with animated car movement. Shows real-time collision checking as the car moves through an obstacle environment with visual feedback.
 
-![Autonomous Vehicle Collision Detection Demo](./images/collision_demo_20250910_171221.gif)
+![Autonomous Vehicle Collision Detection Demo](./test_output/collision_demo_20250910_171221.gif)
 
 
 ### Hybrid A* Path Planning
 
 ```bash
-python -m demo.demo_hybridAstar_test
+python -m demo.test_hybridAstar
 ```
 This is a complete demonstration of Hybrid A* path planning. It tests various scenarios, including diagonal navigation, goal orientation alignment, and corridor traversal, and visualizes the planned path results.
 
 #### Scenario 1: Diagonal Path Planning
-![Diagonal Path Planning](./images/hybrid_astar_diagonal_20250910_171714.gif)
+![Diagonal Path Planning](./test_output/hybrid_astar_diagonal_20250910_171714.gif)
 **Description:** The vehicle plans a diagonal path from the bottom left (5,5) to the top right (55,55). This demonstrates the Hybrid A* algorithm's pathfinding capability in a complex obstacle environment, where the vehicle needs to navigate around two vertical poles to reach the target position.
 
 #### Scenario 2: Goal Orientation Alignment
-![Goal Orientation Alignment](./images/hybrid_astar_diagonal_90_20250910_171808.gif)
+![Goal Orientation Alignment](./test_output/hybrid_astar_diagonal_90_20250910_171808.gif)
 **Description:** Tests the algorithm's ability to handle terminal constraints. The vehicle starts from (5,5,0°) and the target position is (55,55,90°), requiring both position and orientation alignment. The algorithm achieves precise goal orientation alignment through a combination of forward and reverse maneuvers.
 
 #### Scenario 3: Corridor Navigation
-![Corridor Navigation](./images/hybrid_astar_corridor_20250910_171854.gif)
+![Corridor Navigation](./test_output/hybrid_astar_corridor_20250911_105831.gif)
 
 **Description:** The vehicle navigates through a narrow corridor between two poles, from (30,8,90°) to (30,52,90°). This scenario tests the algorithm's path planning capability in constrained spaces, requiring precise vehicle control to avoid collisions.

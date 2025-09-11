@@ -250,6 +250,38 @@ def hybrid_a_star(start: npt.NDArray[np.floating[Any]],
 
         return Node(best, node.cost + best_cost, 0.0, node)
 
+    def _ensure_dir_sign(traj: np.ndarray) -> np.ndarray:
+        """
+        输入 [N,3] 或 [N,4]（x,y,yaw[,dir]），输出 [N,4]，把 dir 统一成 ±1，绝不为 0。
+        规则：用相邻位移在朝向上的投影判断是前进(+1)还是倒车(-1)；无法判断时沿用前一个；第一个默认 +1。
+        """
+        assert traj.ndim == 2 and traj.shape[1] in (3, 4)
+        if traj.shape[1] == 3:
+            traj = np.hstack([traj, np.zeros((traj.shape[0], 1), float)])
+
+        dirc = traj[:, 3].astype(float).copy()
+        N = traj.shape[0]
+        for k in range(1, N):
+            if dirc[k] == 0:
+                dx = traj[k, 0] - traj[k-1, 0]
+                dy = traj[k, 1] - traj[k-1, 1]
+                yaw = traj[k, 2]
+                proj = dx * math.cos(yaw) + dy * math.sin(yaw)
+                if proj > 1e-6:
+                    dirc[k] = 1.0
+                elif proj < -1e-6:
+                    dirc[k] = -1.0
+                else:
+                    dirc[k] = dirc[k-1] if dirc[k-1] != 0 else 1.0
+        if dirc[0] == 0:
+            # 如果第一个还没定，就看第一个非零，否则默认前进
+            nz = np.flatnonzero(dirc)
+            dirc[0] = dirc[nz[0]] if nz.size else 1.0
+
+        traj[:, 3] = np.sign(dirc)
+        return traj
+
+
     def _reconstruct_path(node: Node) -> npt.NDArray[np.floating[Any]]:
         segs = []
         cur = node
@@ -267,12 +299,14 @@ def hybrid_a_star(start: npt.NDArray[np.floating[Any]],
                 segs.append(np.hstack([traj, dircol]))
             cur = cur.parent
         segs.reverse()
-        return np.vstack(segs)
+        return _ensure_dir_sign(np.vstack(segs))
 
     def _end_pose(n:Node) -> tuple[float, float, float]:
         if isinstance(n.path, RSPath):
-            last_waypoint = n.path.waypoints()[-1]
-            return last_waypoint.x, last_waypoint.y, goal[2]
+            # last_waypoint = n.path.waypoints()[-1]
+            # return last_waypoint.x, last_waypoint.y, goal[2]
+            xs, ys, yaws = n.path.coordinates_tuple()
+            return float(xs[-1]), float(ys[-1]), float(yaws[-1])
         else:
             x, y, yaw = n.path.trajectory[-1, :3]
             return float(x), float(y), float(yaw)
@@ -320,7 +354,7 @@ def hybrid_a_star(start: npt.NDArray[np.floating[Any]],
     pq: list[Node] = [start_node]
     heapq.heapify(pq)
 
-    dp = np.empty((N, M, K), dtype=object)  # 与原作一致：dp[(i,j,k)] 存“当前最优的 Node”
+    dp = np.empty((N, M, K), dtype=object)  
     dp[:] = None
     dp[start_i, start_j, start_k] = start_node
 

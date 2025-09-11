@@ -1,4 +1,7 @@
+from typing import Any
+
 import numpy as np
+import numpy.typing as npt
 
 def wrap_angle(theta: float, zero_to_2pi: bool = False):
     """
@@ -17,3 +20,10 @@ def wrap_angle(theta: float, zero_to_2pi: bool = False):
     else:
         # Wrap to [-π, π] (original behavior)
         return (theta + np.pi) % (2.0 * np.pi) - np.pi
+    
+
+def smooth_yaw(yaws: npt.NDArray[np.floating[Any]]) -> npt.NDArray[np.floating[Any]]:
+    "Make the yaws along a trajectory continuous, preventing sudden changes of -2pi -> 2pi"
+    diff = np.diff(yaws, prepend=0)
+    diff = wrap_angle(diff)
+    return np.cumsum(diff)

@@ -31,7 +31,7 @@ class Car:
     SCAN_RADIUS = 15.0  # [m]
 
     
-    def __init__(self, x:float, y:float, yaw:float=0.0,velocity: float=0.0, steer:float=0.0) -> None:
+    def __init__(self, x:float, y:float, yaw:float=0.0, velocity: float=0.0, steer:float=0.0) -> None:
         self.x = x                # [m]
         self.y = y                # [m]
         self.yaw = yaw            # [rad], [-pi, pi]
@@ -60,6 +60,10 @@ class Car:
 
     def align_yaw(self, target_yaw: float) -> None:
         self.yaw = target_yaw + wrap_angle(self.yaw - target_yaw) 
+
+    def copy(self) -> "Car":
+        return Car(self.x, self.y, self.yaw, self.velocity, self.steer)
+
 
     def check_collision(self, obstacles) -> bool:
         pts = obstacles.coordinates
