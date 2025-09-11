@@ -5,8 +5,8 @@ import matplotlib.animation as animation
 import os
 from datetime import datetime
 
-from modeling.obstacles import Obstacles
-from modeling.car import Car
+from ..modeling.obstacles import Obstacles
+from ..modeling.car import Car
 
 def compute_inflation_radius(resolution: float) -> float:
     """

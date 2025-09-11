@@ -3,8 +3,8 @@ import sys
 from PySide6.QtWidgets import QApplication
 from qt_material import apply_stylesheet
 
-from MainWindow import MainWindow
-from utils.set_high_priority import set_high_priority
+from .MainWindow import MainWindow
+from .utils.set_high_priority import set_high_priority
 
 if __name__ == "__main__":
     set_high_priority()

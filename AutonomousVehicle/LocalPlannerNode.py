@@ -6,8 +6,8 @@ import numpy as np
 import numpy.typing as npt
 from PySide6.QtCore import QObject, Qt, QThread, QTimerEvent, Signal, Slot
 
-from .local_planner.ModelPredictiveControl import ModelPredictiveControl, MPCResult
-from .modeling.Car import Car
+from .local_planner.model_predictive_control import ModelPredictiveControl, MPCResult
+from .modeling.car import Car
 from .utils.ProcessWithPipe import ProcessWithPipe
 
 

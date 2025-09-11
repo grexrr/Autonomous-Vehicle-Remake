@@ -5,7 +5,7 @@ import numpy.typing as npt
 import scipy.interpolate
 from PySide6.QtCore import QObject, Qt, QTimerEvent, Signal, Slot
 
-from .modeling.Car import Car
+from .modeling.car import Car
 
 
 class CarSimulationNode(QObject):

@@ -14,16 +14,17 @@ from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QMainWindow
 
-from CarSimulationNode import CarSimulationNode
-from constants import *
-from GlobalPlannerNode import GlobalPlannerNode
-from LocalPlannerNode import LocalPlannerNode, LocalPlanningTrajectories
-from MapServerNode import MapServerNode
-from modeling.Car import Car
-from modeling.Obstacles import Obstacles
-from plotting.CarItem import CarItem
-from TrajectoryCollisionCheckingNode import TrajectoryCollisionCheckingNode
-from ui.mainwindow_ui import Ui_MainWindow
+from .CarSimulationNode import CarSimulationNode
+from .constants import *
+from .GlobalPlannerNode import GlobalPlannerNode
+from .LocalPlannerNode import LocalPlannerNode, LocalPlanningTrajectories
+from .MapServerNode import MapServerNode
+
+from .modeling.car import Car
+from .modeling.obstacles import Obstacles
+from .plotting.CarItem import CarItem
+from .TrajectoryCollisionCheckingNode import TrajectoryCollisionCheckingNode
+from .ui.mainwindow_ui import Ui_MainWindow
 
 SIMULATION_INTERVAL = 0.02  # [s]
 SIMULATION_PUBLISH_INTERVAL = 0.05  # [s]

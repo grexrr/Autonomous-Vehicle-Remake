@@ -3,7 +3,7 @@ from typing import Optional, override
 import numpy as np
 import pyqtgraph as pg
 
-from ..modeling.Car import Car
+from ..modeling.car import Car
 
 
 class CarItem(pg.GraphicsObject):
@@ -15,6 +15,7 @@ class CarItem(pg.GraphicsObject):
             color = pg.mkQApp().palette().color(pg.QtGui.QPalette.ColorRole.WindowText)
         self._color = color
         self._with_lidar = with_lidar
+        self._bounding_rect = pg.QtCore.QRectF()  # 初始化边界矩形
         self.set_state(car)
 
     def set_state(self, car: Optional[Car]) -> None:

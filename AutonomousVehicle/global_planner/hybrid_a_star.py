@@ -8,11 +8,11 @@ import numpy.typing as npt
 from rsplan import Path as RSPath
 from rsplan.planner import _solve_path as solve_rspath
 
-from constants import *
-from utils.wrap_angle import wrap_angle
-from utils.SupportsBool import SupportsBool
-from modeling.car import Car
-from modeling.obstacles import ObstacleGrid, Obstacles
+from ..constants import *
+from ..utils.wrap_angle import wrap_angle
+from ..utils.SupportsBool import SupportsBool
+from ..modeling.car import Car
+from ..modeling.obstacles import ObstacleGrid, Obstacles
 
 XY_GRID_RESOLUTION = 1.0  # [m]
 YAW_GRID_RESOLUTION = np.deg2rad(15.0)  # [rad]

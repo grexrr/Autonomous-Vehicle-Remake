@@ -7,8 +7,8 @@ import numpy.typing as npt
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from .global_planner.hybrid_a_star import Node, hybrid_a_star
-from .modeling.Car import Car
-from .modeling.Obstacles import Obstacles
+from .modeling.car import Car
+from .modeling.obstacles import Obstacles
 from .utils.ProcessWithPipe import ProcessWithPipe
 
 

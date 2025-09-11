@@ -1,0 +1,10 @@
+numpy
+scipy
+rsplan
+cvxpy
+PySide6
+qt_material
+psutil
+pyqtgraph
+matplotlib
+opencv-python

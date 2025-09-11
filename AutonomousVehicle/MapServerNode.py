@@ -9,11 +9,11 @@ import scipy.interpolate
 from PySide6.QtCore import QObject, Signal, Slot
 
 from .constants import *
-from .modeling.Car import Car
-from .modeling.Obstacles import Obstacles
+from .modeling.car import Car
+from .modeling.obstacles import Obstacles
 
 READ_FROM_FILE = True
-MAP_FILE = Path(__file__).absolute().parent / "map.png"
+MAP_FILE = Path(__file__).absolute().parent / "map" / "map.png"
 METER_PER_PIXEL = 0.1
 
 

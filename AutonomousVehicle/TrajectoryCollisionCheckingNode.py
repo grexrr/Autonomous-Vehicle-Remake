@@ -5,8 +5,8 @@ import numpy.typing as npt
 from PySide6.QtCore import QObject, Signal, Slot
 from scipy.spatial import KDTree
 
-from .modeling.Car import Car
-from .modeling.Obstacles import Obstacles
+from .modeling.car import Car
+from .modeling.obstacles import Obstacles
 
 DISCARD_FIRST_N = 5
 
