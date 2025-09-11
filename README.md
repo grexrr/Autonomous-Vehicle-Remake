@@ -7,6 +7,24 @@ This project is a learning project for an autonomous driving path planning syste
 - To deeply understand the algorithm principles and implementation details, I am now independently redoing the entire project
 - Focus on learning the application of the Hybrid A* Algorithm in vehicle motion planning with non-holonomic constraints
 
+![Route Planning Demo](./test_output/0911_1.gif)
+
+**Project Overview:** Developed a comprehensive autonomous driving path planning system based on Hybrid A* Algorithm and Model Predictive Control (MPC), implementing a two-tier architecture with Global Planner and Local Planner
+
+- Core Technologies:
+   - Global Planner: Implemented Hybrid A* algorithm for vehicle motion planning with non-holonomic constraints
+   - Local Planner: Real-time trajectory tracking control using MPC with kinematic bicycle model
+   - Collision Detection: Real-time obstacle detection and avoidance algorithms
+   - Visualization Interface: Real-time simulation interface built with PySide6 and PyQtGraph
+
+**Tech Stack:** Python 3.12+, NumPy, SciPy, CVXPY, PySide6, OpenCV, Matplotlib, PyQtGraph
+
+**Key Features:**
+   - Implemented complete autonomous driving path planning algorithms supporting complex obstacle environments
+   - Adopted hierarchical architecture design with global planner providing coarse paths and local planner for fine control
+   - Supported multiple test scenarios: diagonal navigation, goal orientation alignment, narrow corridor traversal
+   - Provided real-time visualization interface with vehicle state monitoring, trajectory display, and performance metrics
+
 ## Dependencies
 
 Requires Python 3.12 or later.
