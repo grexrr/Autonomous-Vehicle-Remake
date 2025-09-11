@@ -1,6 +1,6 @@
 # Autonomous Vehicle 
 
-This project is a learning project for an autonomous driving path planning system based on the **Hybrid A* Algorithm**. The original project was inspired by FredBill1's open-source implementation: https://github.com/FredBill1/AutonomousDrivingDemo.git
+This project is a learning project for an autonomous driving path planning system based on the **Hybrid A* Algorithm** and **MPC** local planning. Huge credit to FredBill1. The original implementation: https://github.com/FredBill1/AutonomousDrivingDemo.git
 
 **Learning Background:**
 - Initially participated as a group project, mainly responsible for the global planner part
