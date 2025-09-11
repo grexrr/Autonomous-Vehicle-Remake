@@ -175,11 +175,11 @@ def run_case_animated(start, goal, obstacles, title="Hybrid A* demo", save_gif=T
 
     if save_gif:
         # 创建images目录
-        os.makedirs("images", exist_ok=True)
+        os.makedirs("../test_output", exist_ok=True)
         
         # 生成GIF文件名
         # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        gif_filename = f"images/hybrid_astar_{case_name}.gif"
+        gif_filename = f"../test_output/hybrid_astar_{case_name}.gif"
         
         print(f"正在生成GIF动画: {gif_filename}")
         
