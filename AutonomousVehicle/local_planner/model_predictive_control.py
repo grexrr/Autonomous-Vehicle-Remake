@@ -1,3 +1,13 @@
+# Based on a linearized bicycle model (state includes x, y, v, yaw, control includes acceleration a, steering rate or angle), 
+# solving quadratic programming (QP) at each time step.
+# The cost includes:
+# R: Control usage cost (suppress sudden throttle/steering changes)
+# R_D: Control increment cost (suppress jitter)
+# Q / Q_F: State error (trajectory tracking, yaw alignment, speed convergence).
+
+# Additionally, hard constraints on steering angle/speed/acceleration are included. 
+# This allows for smooth and robust tracking of the reference trajectory provided by Hybrid A*.
+
 from typing import Any, NamedTuple, Optional
 
 import cvxpy
@@ -11,7 +21,7 @@ from ..modeling.car import Car
 from ..utils.wrap_angle import smooth_yaw
 
 NEARIST_POINT_SEARCH_RANGE = 20.0  # [m]
-NEARIST_POINT_SEARCH_STEP = 0.1  # [m]
+NEARIST_POINT_SEARCH_STEP = 0.1  # [m]  
 
 HORIZON_LENGTH = 3  # simulate count
 MIN_HORIZON_DISTANCE = 0.3  # [m]
@@ -90,8 +100,8 @@ def _linear_mpc_control(
     dt: float
 ) -> Optional[tuple[npt.NDArray[np.floating[Any]], npt.NDArray[np.floating[Any]]]]:
     """
-    线性化的 MPC 子问题（纯二次目标 + 线性等/不等式约束），
-    使用 OSQP 求解；把所有 |.| 约束改成线性上下界，保证是 QP。
+    线性化的 MPC 子问题(纯二次目标 + 线性等/不等式约束),
+    使用 OSQP 求解把所有 |.| 约束改成线性上下界,保证是 QP。
     """
     H = HORIZON_LENGTH
 
@@ -110,7 +120,7 @@ def _linear_mpc_control(
             # 状态跟踪代价
             cost += cvxpy.quad_form(xref[:, t] - x[:, t], Q)
 
-        # 线性化的离散模型：x_{t+1} = A x_t + B u_t + C
+        # 线性化的离散模型: x_{t+1} = A x_t + B u_t + C
         # 添加数值稳定性检查
         velocity = float(xbar[2, t])
         yaw = float(xbar[3, t])
@@ -131,7 +141,7 @@ def _linear_mpc_control(
     # 速度上下界
     cons += [x[2, :] <= Car.MAX_SPEED, x[2, :] >= Car.MIN_SPEED]
 
-    # 加速度上下界（线性上下界）
+    # 加速度上下界(线性上下界)
     cons += [u[0, :] <= Car.MAX_ACCEL, u[0, :] >= -Car.MAX_ACCEL]
 
     # 转角上下界
@@ -141,7 +151,7 @@ def _linear_mpc_control(
     if ALLOW_STEER_CHANGE_ON_FIRST_POINT:
         d0 = u[1, 0] - last_steer
         lim0 = Car.MAX_STEER_SPEED * dt
-        # 给第一步的转角变化一个二次代价（可选）
+        # 给第一步的转角变化一个二次代价(可选)
         cost += (d0 / dt) * R_D[1, 1] * (d0 / dt)
         cons += [-lim0 <= d0, d0 <= lim0]
     else:
@@ -150,12 +160,12 @@ def _linear_mpc_control(
     for t in range(1, H):
         d = u[1, t] - u[1, t - 1]
         lim = Car.MAX_STEER_SPEED * dt
-        cons += [-lim <= d, d <= lim]  # 线性上下界，替代 abs()
+        cons += [-lim <= d, d <= lim]  # 线性上下界,替代 abs()
         # 控制增量代价
         du_vec = (u[:, t] - u[:, t - 1]) / dt
         cost += cvxpy.quad_form(du_vec, R_D)
 
-    # 求解：OSQP（QP 的首选）
+    # 求解: OSQP(QP 的首选)
     prob = cvxpy.Problem(cvxpy.Minimize(cost), cons)
     
     # 添加求解器参数以提高稳定性
@@ -173,7 +183,7 @@ def _linear_mpc_control(
         prob.solve(solver=cvxpy.OSQP, **solver_params)
     except Exception as e:
         print(f"OSQP failed: {e}")
-        # 兜底：如果没装 OSQP，就试 Clarabel/ECOS
+        # 兜底: 如果没装 OSQP,就试 Clarabel/ECOS
         for s in (cvxpy.CLARABEL, cvxpy.ECOS):
             try:
                 prob.solve(solver=s, warm_start=True, verbose=False)

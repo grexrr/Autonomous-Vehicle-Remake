@@ -226,10 +226,10 @@
 
 #             return distance_cost + switch_direction_cost + steer_change_cost + steer_cost
 
-#         # 起点姿态用 _end_pose，兼容 RSPath/SimplePath
+#         # 起点姿态用 _end_pose, 兼容 RSPath/SimplePath
 #         sx, sy, syaw = _end_pose(node)
 
-#         # 生成所有 Reeds–Shepp 候选
+#         # 生成所有 Reeds-Shepp 候选
 #         paths = solve_rspath(
 #             (sx, sy, syaw), tuple(goal),
 #             Car.TARGET_MIN_TURNING_RADIUS,
@@ -252,7 +252,7 @@
 
 #     def _ensure_dir_sign(traj: np.ndarray) -> np.ndarray:
 #         """
-#         输入 [N,3] 或 [N,4]（x,y,yaw[,dir]），输出 [N,4]，把 dir 统一成 ±1，绝不为 0。
+#         输入 [N,3] 或 [N,4](x,y,yaw[,dir]), 输出 [N,4], 把 dir 统一成 ±1, 绝不为 0。
 #         规则：用相邻位移在朝向上的投影判断是前进(+1)还是倒车(-1)；无法判断时沿用前一个；第一个默认 +1。
 #         """
 #         assert traj.ndim == 2 and traj.shape[1] in (3, 4)
@@ -274,7 +274,7 @@
 #                 else:
 #                     dirc[k] = dirc[k-1] if dirc[k-1] != 0 else 1.0
 #         if dirc[0] == 0:
-#             # 如果第一个还没定，就看第一个非零，否则默认前进
+#             # 如果第一个还没定, 就看第一个非零, 否则默认前进
 #             nz = np.flatnonzero(dirc)
 #             dirc[0] = dirc[nz[0]] if nz.size else 1.0
 
@@ -375,7 +375,7 @@
 
 #         # Termination condition
 #         # Near-end option: 
-#         # resolve direct connection (Reeds–Shepp), use it as the final segment if successful
+#         # resolve direct connection (Reeds-Shepp), use it as the final segment if successful
 #         cx, cy, cyaw = _end_pose(curr)
 #         if _reached_goal(cx, cy, cyaw):
 #             rs_last = _generate_rspath(curr)
@@ -383,7 +383,7 @@
 #                 return _reconstruct_path(rs_last)
 #             return _reconstruct_path(curr)
         
-#         # When close to the goal, first try Reeds–Shepp direct connection and push into the heap to speed up
+#         # When close to the goal, first try Reeds-Shepp direct connection and push into the heap to speed up
 #         ex, ey, _ = _end_pose(curr)
 #         if np.hypot(ex - goal[0], ey - goal[1]) <= REEDS_SHEPP_MAX_DISTANCE:
 #             if (rsnode := _generate_rspath(curr)) is not None:
@@ -627,7 +627,7 @@
     
 #     def _ensure_dir_sign(traj: np.ndarray) -> np.ndarray:
 #         """
-#         输入 [N,3] 或 [N,4]（x,y,yaw[,dir]），输出 [N,4]，把 dir 统一成 ±1，绝不为 0。
+#         输入 [N,3] 或 [N,4](x,y,yaw[,dir]), 输出 [N,4], 把 dir 统一成 ±1, 绝不为 0。
 #         规则：用相邻位移在朝向上的投影判断是前进(+1)还是倒车(-1)；无法判断时沿用前一个；第一个默认 +1。
 #         """
 #         assert traj.ndim == 2 and traj.shape[1] in (3, 4)
@@ -649,7 +649,7 @@
 #                 else:
 #                     dirc[k] = dirc[k-1] if dirc[k-1] != 0 else 1.0
 #         if dirc[0] == 0:
-#             # 如果第一个还没定，就看第一个非零，否则默认前进
+#             # 如果第一个还没定, 就看第一个非零, 否则默认前进
 #             nz = np.flatnonzero(dirc)
 #             dirc[0] = dirc[nz[0]] if nz.size else 1.0
 
@@ -717,6 +717,12 @@
 #                 heapq.heappush(pq, neighbour)
 #     return None
 
+
+
+
+# Dijkstra Heuristic: Run Dijkstra's algorithm in reverse from the goal point on a 2D grid to obtain the minimum cost from each grid cell to the goal (including the inflated cost due to obstacles). This cost field h(x,y) is used as a consistent and admissible heuristic in Hybrid A*, significantly reducing the number of expanded nodes and accelerating convergence.
+
+# Hybrid A*: In the x, y, yaw 3D grid (discrete position + continuous/fine discrete heading), use a vehicle kinematic model (a single-track/bicycle model) to generate a set of motion primitives for forward expansion. Each step's cost integrates path length, steering/curvature change, reverse penalty, etc., and performs collision detection. If necessary, attempt analytic expansion to directly "pull" the current node towards the goal (e.g., Dubins/Reeds-Shepp connection) to reduce zigzagging. The goal is to obtain a drivable and obstacle-avoiding reference path.
 
 import heapq
 from collections.abc import Callable, Generator
