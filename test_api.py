@@ -1,15 +1,16 @@
-# test_api.py（放在项目根目录）
-"""测试 API 基础框架"""
+# test_routes.py
+"""Test API routes"""
 from api.app import create_app
 
 if __name__ == '__main__':
     app = create_app('development')
-    print("Flask 应用创建成功！")
-    print(f"配置的 CORS 域名: {app.config['CORS_ORIGINS']}")
-    print(f"调试模式: {app.config['DEBUG']}")
-
-    from api.app import socketio
-    if socketio:
-        print("SocketIO 初始化成功！")
-    else:
-        print("警告：SocketIO 未初始化")
+    
+    # Print all registered routes
+    print("Registered routes:")
+    for rule in app.url_map.iter_rules():
+        print(f"  {rule.methods} {rule.rule}")
+    
+    print("\n✅ Routes registered successfully!")
+    print("\nYou can start the server to test:")
+    print("  from api.app import app, socketio")
+    print("  socketio.run(app, host='0.0.0.0', port=5000, debug=True)")

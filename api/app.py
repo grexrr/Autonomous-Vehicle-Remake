@@ -32,6 +32,8 @@ def create_app(config_name='development'):
 
     app.socketio = socketio
 
-    # 4. register route (TODO)
+    # 4. register route
+    from .routes import api_vehicle
+    app.register_blueprint(api_vehicle)
 
     return app
