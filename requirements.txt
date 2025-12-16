@@ -8,3 +8,8 @@ psutil
 pyqtgraph
 matplotlib
 opencv-python
+flask
+flask-cors
+flask-socketio
+eventlet
+gunicorn

@@ -1,5 +1,8 @@
 venv
 .venv
+.cursor/
+plans/
+.plans/
 
 __pycache__/
 
@@ -73,5 +76,6 @@ venv.bak/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
 
 images/*
