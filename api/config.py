@@ -1,7 +1,8 @@
 import os
 from typing import List
+from dotenv import load_dotenv 
 
-
+load_dotenv()
 # =============== Basic Config =============== 
 class Config:
     # Flask App key (for session encryption, etc) 
