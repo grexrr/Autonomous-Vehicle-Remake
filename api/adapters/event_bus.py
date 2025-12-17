@@ -1,3 +1,5 @@
+import logging
+import threading
 from typing import Callable, Any, Dict, List
 
 class EventBus:
@@ -18,14 +20,15 @@ class EventBus:
 
     def __init__(self):
         """
-        初始化事件总线
-        
-        数据结构：
+        Initialize the event bus
+
+        Data structure:
         _subscribers = {
             'event_name': [callback1, callback2, ...]
         }
         """
         self._subscribers: Dict[str, List[Callable]] = {}
+        self._lock = threading.Lock()
 
     def subscribe(self, event_type:str, callback: Callable) -> None:
         """
@@ -38,9 +41,10 @@ class EventBus:
         Example:
             event_bus.subscribe('measured_state', my_function)
         """
-        if event_type not in self._subscribers:
-            self._subscribers[event_type] = []
-        self._subscribers[event_type].append(callback)
+        with self._lock:
+            if event_type not in self._subscribers:
+                self._subscribers[event_type] = []
+            self._subscribers[event_type].append(callback)
 
     
     def emit(self, event_type: str, *args: Any, **kwargs:Any) -> None:
@@ -56,10 +60,18 @@ class EventBus:
             event_bus.emit('measured_state', timestamp, car_object)
             event_bus.emit('state_update', timestamp=1.0, x=2.0)
         """
-        
-        if event_type in self._subscribers:
-            for callback in self._subscribers[event_type]:
+        callbacks = []
+        with self._lock:
+            if event_type not in self._subscribers:
+                return
+            callbacks = self._subscribers[event_type].copy()
+
+        for callback in callbacks:
+            try:
                 callback(*args, **kwargs)
+            except Exception as e:
+                print(f"[EventBus] Error in callback for event '{event_type}': {e}")
+                logging.error(f"[EventBus] Error in callback for event '{event_type}': {e}", exc_info=True)
     
     def unsubscribe(self, event_type: str, callback: Callable) -> None:
         """
@@ -69,12 +81,16 @@ class EventBus:
             event_type: Event name
             callback: Callback function to be removed
         """
-        if event_type in self._subscribers:
-            if callback in self._subscribers[event_type]:
-                self._subscribers[event_type].remove(callback)
+        with self._lock:  
+            if event_type in self._subscribers:
+                if callback in self._subscribers[event_type]:
+                    self._subscribers[event_type].remove(callback)
+                    if len(self._subscribers[event_type]) == 0:
+                        del self._subscribers[event_type]
     
     def clear(self) -> None:
         """
         Clear all subscriptions
         """
-        self._subscribers.clear()
+        with self._lock:  
+            self._subscribers.clear()
