@@ -5,6 +5,12 @@ import numpy as np
 import numpy.typing as npt
 import scipy.interpolate
 
+import sys
+from pathlib import Path as _Path
+_project_root = _Path(__file__).parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
 from AutonomousVehicle.modeling.car import Car
 from api.event_types import *
 from .event_bus import EventBus

@@ -12,7 +12,6 @@ from AutonomousVehicle.modeling.car import Car
 
 
 def test_initialization():
-    """测试初始化"""
     print("=== Test 1: Initialization ===")
     
     event_bus = EventBus()
