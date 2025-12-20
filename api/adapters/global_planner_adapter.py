@@ -79,15 +79,15 @@ def _worker_process(pipe: Connection, segment_collection_size: int) -> None:
                         return True
 
                     # sent intermediate result to main process
-                    pipe.send(_WorkerMsgType.DISPLAY_SEGMENTS, display_segments)
+                    pipe.send((_WorkerMsgType.DISPLAY_SEGMENTS, display_segments))
                     display_segments.clear()
                     return False
                 
                 # the actual algorithm
                 traj = hybrid_a_star(start, goal, obstacles, callback)
 
-                if not pipe.poll:
-                    pipe.send(_WorkerMsgType.TRAJECTORY, traj)
+                if not pipe.poll():
+                    pipe.send((_WorkerMsgType.TRAJECTORY, traj))
 
 class GlobalPlannerAdapter:
     """

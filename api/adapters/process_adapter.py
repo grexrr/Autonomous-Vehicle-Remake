@@ -66,15 +66,19 @@ class ProcessAdapter:
         self._running = False
         self._listener_thread: Optional[threading.Thread] = None
         
+        # Store target and args for potential restart
+        self._target = target
+        self._args = args
+        self._kwargs = kwargs or {}
+        
         # create pipe for inter-process comms
         self._parent_pipe, self._child_pipe = mp.Pipe()
 
         # create child process
-        kwargs = kwargs or {}
         self._child_process = mp.Process(
             target=target,
             args=(self._child_pipe, *args),
-            kwargs=kwargs,
+            kwargs=self._kwargs,
             daemon=True
         )
     
@@ -106,20 +110,43 @@ class ProcessAdapter:
     
     def stop(self) -> None:
         """Stop the child process and listener thread"""
+        if not self._running:
+            return
+        
         self._running = False
 
-        if self._child_process.is_alive():
+        # Terminate and wait for process
+        if hasattr(self._child_process, 'is_alive') and self._child_process.is_alive():
             self._child_process.terminate()
             self._child_process.join(timeout=1.0)
             if self._child_process.is_alive():
                 self._child_process.kill()
+                self._child_process.join(timeout=1.0)
         
+        # Wait for listener thread
         if self._listener_thread and self._listener_thread.is_alive():
             self._listener_thread.join(timeout=1.0)
         
-        # close pipes
-        self._parent_pipe.close()
-        self._child_pipe.close()
+        # Close pipes
+        try:
+            if not self._parent_pipe.closed:
+                self._parent_pipe.close()
+        except:
+            pass
+        try:
+            if not self._child_pipe.closed:
+                self._child_pipe.close()
+        except:
+            pass
+        
+        # Recreate pipes and process for potential restart
+        self._parent_pipe, self._child_pipe = mp.Pipe()
+        self._child_process = mp.Process(
+            target=self._target,
+            args=(self._child_pipe, *self._args),
+            kwargs=self._kwargs,
+            daemon=True
+        )
 
     def _listen_loop(self) -> None:
         """
