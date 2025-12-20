@@ -195,6 +195,11 @@ def _linear_mpc_control(
         print(f"Error: Cannot solve mpc: {prob.status}")
         return None
 
+    # ensure solver results
+    if u.value is None or x.value is None:
+        print(f"Error: Solver returned None values")
+        return None
+
     return u.value, x.value
 
 
@@ -344,9 +349,14 @@ class ModelPredictiveControl:
     def _find_nearist_point(self, state: Car) -> None:
         "find the nearist point on the reference trajectory to the given state"
 
-        def cost(u: float) -> float:
-            return np.linalg.norm(np.array(scipy.interpolate.splev(u, self._tck)[:2]).T - [state.x, state.y])
+                
+        # def cost(u: float) -> float:
+        #     return np.linalg.norm(np.array(scipy.interpolate.splev(u, self._tck)[:2]).T - [state.x, state.y])
 
+        def cost(u: float | np.floating[Any] | npt.NDArray[np.floating[Any]]) -> float:
+            u_val = float(u) if not isinstance(u, (float, int)) else u
+            return np.linalg.norm(np.array(scipy.interpolate.splev(u_val, self._tck)[:2]).T - [state.x, state.y]).item()
+        
         # only a simple hill climbing to intentionally find the nearist local minima, to make sure every part of the trajectory is not skipped
         min_dist, min_u = np.inf, self._cur_u
         search_limit = min(self._u_limit, self._cur_u + NEARIST_POINT_SEARCH_RANGE)
