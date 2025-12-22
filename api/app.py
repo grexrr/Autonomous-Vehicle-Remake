@@ -31,7 +31,8 @@ def create_app(config_name='development'):
         # async_mode='eventlet' 
     )
     
-    app.socketio = socketio 
+    app.socketio = socketio # type: ignore[attr-defined]
+    
     # 4. register route
     from .routes import api_vehicle
     app.register_blueprint(api_vehicle)
