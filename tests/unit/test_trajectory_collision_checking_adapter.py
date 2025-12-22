@@ -2,14 +2,13 @@ import numpy as np
 import numpy.typing as npt
 
 from api.adapters.event_bus import EventBus
-from api.adapters.trajectory_collision_checking_adapter import TrajectoryCollisionCheckingAdapter
+from api.adapters.trajectory_collision_checking_adapter import TrajectoryCollisionCheckingAdapter, DISCARD_FIRST_N
 from api.event_types import (
     GLOBAL_PLANNER_TRAJECTORY,
     KNOWN_OBSTACLES_UPDATED,
     NEW_OBSTACLES_DISCOVERED,
-    TRAJECTORY_COLLIDED
+    TRAJECTORY_COLLIDED,
 )
-from AutonomousVehicle.TrajectoryCollisionCheckingNode import DISCARD_FIRST_N
 
 
 def test_initialization():

@@ -1,17 +1,41 @@
 import numpy as np
 import numpy.typing as npt
 from typing import Any, Optional
+from scipy.spatial import KDTree
 
 import sys
 from pathlib import Path
+
 _project_root = Path(__file__).parent.parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from AutonomousVehicle.modeling.obstacles import Obstacles
-from AutonomousVehicle.TrajectoryCollisionCheckingNode import TrajectoryCollisionChecker, DISCARD_FIRST_N
+from AutonomousVehicle.modeling.car import Car
 from api.event_types import GLOBAL_PLANNER_TRAJECTORY, KNOWN_OBSTACLES_UPDATED, NEW_OBSTACLES_DISCOVERED, TRAJECTORY_COLLIDED
 from .event_bus import EventBus
+
+DISCARD_FIRST_N = 5
+
+class TrajectoryCollisionChecker:
+    def __init__(self, trajectory: npt.NDArray[np.floating[Any]]) -> None:
+        assert trajectory.ndim == 2 and trajectory.shape[1] == 3, "trajectory must be 2D array having [[x, y, yaw]]"
+        self._trajectory = trajectory
+
+        # Calculate the trajectory of the center of the car, instead of the center of the rear axle
+        xy, yaw = trajectory[:, :2], trajectory[:, 2]
+        cy, sy = np.cos(yaw), np.sin(yaw)
+        xy = (xy.T + [Car.BACK_TO_CENTER * cy, Car.BACK_TO_CENTER * sy]).T
+        self._trajectory_kd_tree = KDTree(xy)
+
+    def check(self, obstacles: Obstacles) -> bool:
+        indices = self._trajectory_kd_tree.query_ball_tree(obstacles.kd_tree, Car.COLLISION_RADIUS)
+        for i, ids in enumerate(indices):
+            if not ids:
+                continue
+            if Car(*self._trajectory[i]).check_collision(obstacles.coordinates[ids]):
+                return True
+        return False
 
 class TrajectoryCollisionCheckingAdapter:
     """

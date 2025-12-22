@@ -2,14 +2,11 @@ numpy
 scipy
 rsplan
 cvxpy
-PySide6
-qt_material
 psutil
-pyqtgraph
-matplotlib
 opencv-python
 flask
 flask-cors
 flask-socketio
 eventlet
 gunicorn
+python-dotenv

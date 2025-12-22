@@ -4,6 +4,8 @@ from flask_socketio import SocketIO
 from .config import config
 from .websocket_handlers import init_websocket_handlers
 
+import os
+
 socketio = None
 
 def create_app(config_name='development'):
@@ -41,3 +43,7 @@ def create_app(config_name='development'):
     init_websocket_handlers(socketio)
 
     return app
+
+import os
+_app_env = os.getenv('FLASK_ENV', 'development')
+app = create_app(_app_env)
