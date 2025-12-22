@@ -94,15 +94,15 @@ class MapServerAdapter:
         self._bounding_box = None
 
     @property
-    def known_obstacle_coordinates(self) -> npt.NDArray[np.floating[Any]]:
+    def known_obstacle_coordinates(self) -> npt.NDArray[np.floating[Any]] | None:
         return self._known_obstacle_coordinates
     
     @property
-    def unknown_obstacle_coordinates(self) -> npt.NDArray[np.floating[Any]]:
+    def unknown_obstacle_coordinates(self) -> npt.NDArray[np.floating[Any]] | None:
         return self._unknown_obstacle_coordinates
 
     @property
-    def bounding_box(self) -> tuple[float, float, float, float]:
+    def bounding_box(self) -> tuple[float, float, float, float] | None:
         """Get map boundary (xmin, ymin, xmax, ymax)"""
         return self._bounding_box
 
@@ -141,7 +141,11 @@ class MapServerAdapter:
             x: x-coordinate of scan center
             y: y-coordinate of scan center
         """
-
+        if (self._unknown_obstacles is None or 
+            self._havent_discovered is None or 
+            self._unknown_obstacle_coordinates is None or 
+            self._known_obstacle_coordinates is None):
+            return
         # 1. query obstacles within scan radius
         ids = np.array(self._unknown_obstacles.kd_tree.query_ball_point((x, y), Car.SCAN_RADIUS))
         if ids.size == 0:
@@ -183,6 +187,10 @@ class MapServerAdapter:
         Returns:
             Car: Randomly generated vehicle state
         """
+        if (self._known_obstacle_coordinates is None or 
+            self._unknown_obstacle_coordinates is None):
+            raise RuntimeError("Map must be initialized before generating random initial state. Call init_map() first.")
+        
         obstacles = Obstacles(np.vstack((self._known_obstacle_coordinates, self._unknown_obstacle_coordinates)))
         state = np.random.uniform((0, 0, -np.pi), (MAP_WIDTH, MAP_HEIGHT, np.pi))
         while Car(*state).check_collision(obstacles):

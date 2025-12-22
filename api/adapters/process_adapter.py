@@ -1,7 +1,7 @@
 import multiprocessing as mp
 import threading
 from multiprocessing.connection import Connection
-from typing import Any, Callable, Optional, Protocol
+from typing import Any, Optional, Protocol
 import sys
 from pathlib import Path
 
@@ -49,7 +49,7 @@ class ProcessAdapter:
         event_name: str,
         target: CallableWithConnection, # working function
         args: tuple = (),
-        kwargs: dict = None
+        kwargs: Optional[dict] = None
     ) -> None:
         """
         Initialize process adapter

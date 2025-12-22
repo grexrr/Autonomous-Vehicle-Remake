@@ -1,7 +1,10 @@
 from flask import Blueprint, jsonify, request
 from typing import Dict, Any
+from api.simulation_manager import SimulationManager
+from api.utils import serialize_car
 
 api_vehicle = Blueprint('vehicle', __name__, url_prefix='/api/vehicle')
+manager = SimulationManager()
 
 @api_vehicle.route('/health', methods=['GET'])
 def health_check():
@@ -40,16 +43,15 @@ def create_session():
 
     # acquire JSON sent by clients
     data = request.get_json() or {}
+    initial_state = data.get('initial_state')
 
-    # TODO： Session management
-    # Use mock session_id for now
-    import uuid
-    session_id = str(uuid.uuid4())
+    # Session management
+    session_id = manager.create_session(initial_state)
 
     return jsonify({
         'session_id': session_id,
         'status': 'created',
-        'message': 'Session created successfully'
+        'message': f'Session {session_id} created successfully'
     }), 201
 
 
@@ -69,12 +71,56 @@ def get_session_status(session_id: str):
         }
     """
 
-    # TODO: Session Query
+    # Session Query
+    session = manager.get_session(session_id)
+
+    if session is None:
+        return jsonify({
+            'error': f'Session {session_id} not found!'
+        }), 404
+
+    state = session.get_state()
+    if state is None:
+        return jsonify({
+            'session_id': session_id,
+            'status': f'Session {session_id} initializing.'
+        }), 200
+    
+    timestamp, car = state
     # Now returning mock data
     return jsonify({
         'session_id': session_id,
         'status': 'active',
+        'car_state': serialize_car(car),
+        'timestamp': timestamp,
         'message': 'Session status retrieved'
+    }), 200
+
+@api_vehicle.route('/session/<session_id>/map', methods=['GET'])
+def get_session_map(session_id: str):
+    """
+    Get map data for visualization
+    
+    Args:
+        session_id: Session ID
+    
+    Returns:
+        JSON: {
+            "bounding_box": [xmin, ymin, xmax, ymax],
+            "known_obstacles": [[x, y], ...],
+            "unknown_obstacles": [[x, y], ...]
+        }
+    """
+    user_session = manager.get_session(session_id)
+    if user_session is None:
+        return jsonify({
+            'error': f'Session {session_id} not found!'
+        }), 404
+    
+    map_data = user_session.get_map_data()
+    return jsonify({
+        'session_id': session_id,
+        **map_data
     }), 200
 
 @api_vehicle.route('/session/<session_id>', methods=['DELETE'])
@@ -89,7 +135,13 @@ def delete_session(session_id: str):
         JSON: {"message": "Session deleted"}
     """
 
-    # TODO: Implement real session deletion later
-    return jsonify({
-        'message': f'Session {session_id} deleted successfully'
-    }), 200
+    success = manager.delete_session(session_id)
+
+    if not success:
+        return jsonify({
+            'error': f'Session {session_id} not found.'
+        }), 404
+    else:
+        return jsonify({
+            'message': f'Session {session_id} deleted successfully'
+        }), 200

@@ -2,6 +2,7 @@ from flask import Flask
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from .config import config
+from .websocket_handlers import init_websocket_handlers
 
 socketio = None
 
@@ -29,11 +30,13 @@ def create_app(config_name='development'):
         cors_allowed_origins=app.config['SOCKETIO_CORS_ALLOWED_ORIGINS'],
         # async_mode='eventlet' 
     )
-
-    app.socketio = socketio
-
+    
+    app.socketio = socketio 
     # 4. register route
     from .routes import api_vehicle
     app.register_blueprint(api_vehicle)
+
+    # 5. register WebSocket Processor
+    init_websocket_handlers(socketio)
 
     return app

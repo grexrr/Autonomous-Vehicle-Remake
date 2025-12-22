@@ -69,7 +69,7 @@ class CarSimulationAdapter:
             return 
         self._timestamp_s += self._delta_time_s
 
-        if self._control_tck is None:
+        if self._control_tck is None or self._control_u is None:
             self._real_state.update(self._delta_time_s)
             return
         

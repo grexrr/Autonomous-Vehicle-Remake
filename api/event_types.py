@@ -11,3 +11,5 @@ GLOBAL_PLANNER_FINISHED = 'global_planner_finished'
 # local planner events
 LOCAL_PLANNER_CONTROL_SEQUENCE = 'local_planner_control_sequence'
 LOCAL_PLANNER_TRAJECTORIES = 'local_planner_trajectories'
+
+TRAJECTORY_COLLIDED = 'trajectory_collided'

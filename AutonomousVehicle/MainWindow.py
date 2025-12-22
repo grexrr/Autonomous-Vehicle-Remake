@@ -250,6 +250,9 @@ class MainWindow(QMainWindow):
 
     def _global_plan(self) -> None:
         start = self._measured_state
+        if start is None:
+            return
+        
         if abs(start.velocity) > REPLAN_MAX_SPEED and self._brake_trajectory is not None:
             start = self._brake_trajectory
         self.set_goal.emit(start, self._goal_state, Obstacles(self._map_server_node.known_obstacle_coordinates))
