@@ -37,6 +37,16 @@ def register_handlers():
         
         if not session_id:
             session_id = request.args.get('session_id')
+
+        import json, time
+        with open('/Users/grexrr/Documents/Autonomous-Vehicle-Remake/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({
+                'id': 'log_ws_connect',
+                'timestamp': time.time() * 1000,
+                'location': 'websocket_handlers.py:connect',
+                'data': {'session_id': session_id, 'auth': auth},
+                'sessionId': 'debug-session', 'runId': 'run1', 'hypothesisId': 'E'
+            }) + '\n')
         
         if not session_id:
             emit('error', {'message': 'session_id is requrired'})
@@ -73,9 +83,17 @@ def register_handlers():
         return True
     
     @socketio.on('disconnect')
-    def handle_disconnect():
-        """Handle client disconnect"""
-        pass
+    def handle_disconnect(reason=None):
+        import json, time
+        with open('/Users/grexrr/Documents/Autonomous-Vehicle-Remake/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({
+                'id': 'log_ws_disconnect',
+                'timestamp': time.time() * 1000,
+                'location': 'websocket_handlers.py:disconnect',
+                'message': 'client disconnected',
+                'data': {'reason': reason, 'session_id': request.args.get('session_id')},
+                'sessionId': 'debug-session', 'runId': 'run1', 'hypothesisId': 'E'
+            }) + '\n')
 
     @socketio.on('set_goal')
     def handle_set_goal(data):

@@ -3,8 +3,12 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 from .config import config
 from .websocket_handlers import init_websocket_handlers
-
 import os
+
+# import eventlet
+# print(f"[DEBUG] Eventlet version: {eventlet.__version__}")
+# print(f"[DEBUG] Eventlet patched socket: {eventlet.patcher.is_monkey_patched('socket')}")
+
 
 socketio = None
 
@@ -30,7 +34,10 @@ def create_app(config_name='development'):
     socketio = SocketIO(
         app,
         cors_allowed_origins=app.config['SOCKETIO_CORS_ALLOWED_ORIGINS'],
-        # async_mode='eventlet' 
+        async_mode='threading',
+        transports=['websocket'],  # force websocket to avoid long-poll fallback issues
+        ping_timeout=300,          # allow longer idle before timing out
+        ping_interval=20,           # send ping a bit more frequently
     )
     
     app.socketio = socketio # type: ignore[attr-defined]

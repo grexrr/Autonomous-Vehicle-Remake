@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自动驾驶车辆测试界面</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #4CAF50;
+            margin-bottom: 20px;
+        }
+        
+        .control-panel {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .status-panel {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #3a3a3a;
+        }
+        
+        .status-item:last-child {
+            border-bottom: none;
+        }
+        
+        .status-label {
+            color: #888;
+        }
+        
+        .status-value {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        button.danger {
+            background: #f44336;
+        }
+        
+        button.danger:hover {
+            background: #da190b;
+        }
+        
+        button.warning {
+            background: #ff9800;
+        }
+        
+        button.warning:hover {
+            background: #e68900;
+        }
+        
+        .canvas-container {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        
+        #mapCanvas {
+            width: 100%;
+            height: 600px;
+            border: 2px solid #3a3a3a;
+            border-radius: 4px;
+            cursor: crosshair;
+            background: #1a1a1a;
+        }
+        
+        .log-panel {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .log-entry {
+            padding: 4px 0;
+            font-size: 12px;
+            color: #aaa;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .log-entry.error {
+            color: #f44336;
+        }
+        
+        .log-entry.success {
+            color: #4CAF50;
+        }
+        
+        .log-entry.info {
+            color: #2196F3;
+        }
+        
+        .connection-status {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .connection-status.connected {
+            background: #4CAF50;
+        }
+        
+        .connection-status.disconnected {
+            background: #f44336;
+        }
+        
+        .connection-status.connecting {
+            background: #ff9800;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚗 自动驾驶车辆测试界面</h1>
+        
+        <div class="control-panel">
+            <button id="createSessionBtn">创建会话</button>
+            <button id="setGoalBtn" disabled>设置目标点</button>
+            <button id="brakeBtn" disabled>刹车</button>
+            <button id="cancelBtn" disabled class="danger">取消</button>
+            <button id="restartBtn" disabled class="warning">重启</button>
+        </div>
+        
+        <div class="status-panel">
+            <h3>连接状态</h3>
+            <div class="status-item">
+                <span class="status-label">WebSocket:</span>
+                <span class="status-value">
+                    <span class="connection-status disconnected" id="wsStatus"></span>
+                    <span id="wsStatusText">未连接</span>
+                </span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">会话ID:</span>
+                <span class="status-value" id="sessionId">-</span>
+            </div>
+            <h3 style="margin-top: 20px;">车辆状态</h3>
+            <div class="status-item">
+                <span class="status-label">位置 X:</span>
+                <span class="status-value" id="carX">-</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">位置 Y:</span>
+                <span class="status-value" id="carY">-</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">航向角:</span>
+                <span class="status-value" id="carYaw">-</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">速度:</span>
+                <span class="status-value" id="carVelocity">-</span>
+            </div>
+        </div>
+        
+        <div class="canvas-container">
+            <canvas id="mapCanvas"></canvas>
+            <p style="margin-top: 10px; color: #888; font-size: 12px;">
+                提示: 点击地图设置目标点（需要先创建会话并连接WebSocket）
+            </p>
+        </div>
+        
+        <div class="log-panel">
+            <h3>日志</h3>
+            <div id="logContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        // 可以通过URL参数指定主机和端口，例如: ?host=192.168.1.100&port=5000 或 ?port=5001
+        const urlParams = new URLSearchParams(window.location.search);
+        const API_HOST = urlParams.get('host') || 'localhost';  // 默认使用localhost
+        const API_PORT = urlParams.get('port') || '5000';  // 默认使用5000端口
+        const API_BASE = `http://${API_HOST}:${API_PORT}/api/vehicle`;
+        const WS_URL = `http://${API_HOST}:${API_PORT}`;
+        
+        let socket = null;
+        let sessionId = null;
+        let canvas = null;
+        let ctx = null;
+        let mapData = null;
+        let carState = null;
+        let globalTrajectory = null;
+        let isSettingGoal = false;
+        
+        // 初始化Canvas
+        function initCanvas() {
+            canvas = document.getElementById('mapCanvas');
+            ctx = canvas.getContext('2d');
+            
+            // 设置Canvas实际尺寸
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            
+            // 监听点击事件
+            canvas.addEventListener('click', handleCanvasClick);
+        }
+        
+        // 日志功能
+        function log(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        // 更新连接状态
+        function updateConnectionStatus(status, text) {
+            const statusEl = document.getElementById('wsStatus');
+            const textEl = document.getElementById('wsStatusText');
+            statusEl.className = `connection-status ${status}`;
+            textEl.textContent = text;
+        }
+        
+        // 创建会话
+        async function createSession() {
+            try {
+                log('正在创建会话...', 'info');
+                log(`尝试连接: ${API_BASE}/session/create`, 'info');
+                
+                // 不传 initial_state，让服务器生成随机初始状态（参考 MainWindow._inited）
+                const response = await fetch(`${API_BASE}/session/create`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    log(`HTTP错误 ${response.status}: ${errorText}`, 'error');
+                    return;
+                }
+                
+                const data = await response.json();
+                if (data.session_id) {
+                    sessionId = data.session_id;
+                    document.getElementById('sessionId').textContent = sessionId;
+                    log(`会话创建成功: ${sessionId}`, 'success');
+                    
+                    // 连接WebSocket
+                    connectWebSocket();
+                    
+                    // 获取地图数据
+                    fetchMapData();
+                } else {
+                    log(`创建会话失败: ${JSON.stringify(data)}`, 'error');
+                }
+            } catch (error) {
+                log(`创建会话错误: ${error.message}`, 'error');
+                log('提示: 请确保API服务器正在运行 (python run_api.py)', 'error');
+                log('提示: 如果使用file://打开，请使用HTTP服务器 (python -m http.server)', 'error');
+            }
+        }
+        
+        // 获取地图数据
+        async function fetchMapData() {
+            if (!sessionId) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/session/${sessionId}/map`);
+                const data = await response.json();
+                if (response.ok) {
+                    mapData = data;
+                    log('地图数据加载成功', 'success');
+                    drawMap();
+                }
+            } catch (error) {
+                log(`获取地图数据错误: ${error.message}`, 'error');
+            }
+        }
+        
+        // 连接WebSocket
+        function connectWebSocket() {
+            if (!sessionId) {
+                log('无法连接: 没有会话ID', 'error');
+                return;
+            }
+            
+            updateConnectionStatus('connecting', '连接中...');
+            log('正在连接WebSocket...', 'info');
+            
+            socket = io(WS_URL, {
+                auth: { session_id: sessionId },
+                query: { session_id: sessionId },
+                transports: ['websocket'],   // force pure websocket, skip polling
+                // Enable auto reconnection with reasonable backoff
+                reconnection: true,
+                reconnectionAttempts: 10,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                timeout: 20000, // overall connection timeout
+                // Client heartbeat tuning (matches server-side loosened timeouts)
+                pingTimeout: 30000,   // wait for pong
+                pingInterval: 20000   // send ping every 20s
+            });
+            
+            socket.on('connect', () => {
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/aeb2af75-cf93-49d9-8a26-77c89d62730f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'web_test.html:353',message:'socket connect event',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                // #endregion
+                updateConnectionStatus('connected', '已连接');
+                log('WebSocket连接成功', 'success');
+                enableControls();
+            });// web_test.html 删除重复的 disconnect 处理器（保留一个即可）
+            
+            socket.on('disconnect', (reason) => {
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/aeb2af75-cf93-49d9-8a26-77c89d62730f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'web_test.html:359',message:'socket disconnect event',data:{reason:reason},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                // #endregion
+                updateConnectionStatus('disconnected', '已断开');
+                log('WebSocket连接断开', 'error');
+                log(`WebSocket断开，原因: ${reason}`, 'error');
+                disableControls();
+            });
+
+            socket.on('error', (data) => {
+                log(`错误: ${data.message}`, 'error');
+            });
+            
+            socket.on('state_update', (data) => {
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/aeb2af75-cf93-49d9-8a26-77c89d62730f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'web_test.html:373',message:'received state_update',data:{car_x:data.car.x,car_y:data.car.y,car_velocity:data.car.velocity,timestamp:data.timestamp},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                // #endregion
+                carState = data.car;
+                updateCarState(data.car);
+                drawMap();
+            });
+            
+            socket.on('map_data', (data) => {
+                mapData = data;
+                log('收到地图数据', 'info');
+                drawMap();
+            });
+            
+            socket.on('global_trajectory', (data) => {
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/aeb2af75-cf93-49d9-8a26-77c89d62730f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'web_test.html:385',message:'received global_trajectory',data:{trajectory_length:data.trajectory ? data.trajectory.length : 0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                // #endregion
+                globalTrajectory = data.trajectory;
+                log('收到全局轨迹', 'success');
+                drawMap();
+            });
+            
+            socket.on('goal_unreachable', (data) => {
+                log(`目标不可达: ${data.message}`, 'error');
+                globalTrajectory = null;
+                drawMap();
+            });
+            
+            socket.on('obstacles_updated', (data) => {
+                if (mapData) {
+                    mapData.known_obstacles = data.obstacles;
+                    log('障碍物已更新', 'info');
+                    drawMap();
+                }
+            });
+            
+            socket.on('new_obstacles', (data) => {
+                if (mapData) {
+                    mapData.unknown_obstacles = data.obstacles;
+                    log('发现新障碍物', 'info');
+                    drawMap();
+                }
+            });
+
+            socket.on('display_segments', (data) => {
+                displaySegments = data.segments;
+                log('收到规划中间结果', 'info');
+                drawMap(); // 重新绘制地图，显示规划过程
+            });
+        }
+        
+        // 更新车辆状态显示
+        function updateCarState(car) {
+            document.getElementById('carX').textContent = car.x.toFixed(2);
+            document.getElementById('carY').textContent = car.y.toFixed(2);
+            document.getElementById('carYaw').textContent = (car.yaw * 180 / Math.PI).toFixed(1) + '°';
+            document.getElementById('carVelocity').textContent = (car.velocity * 3.6).toFixed(2) + ' km/h';
+        }
+        
+        // 绘制地图
+        function drawMap() {
+            if (!ctx || !mapData) return;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const bbox = mapData.bounding_box;
+            if (!bbox || bbox.length !== 4) return;
+            
+            const [xmin, ymin, xmax, ymax] = bbox;
+            const width = xmax - xmin;
+            const height = ymax - ymin;
+            
+            // 计算缩放和偏移
+            const scaleX = canvas.width / width;
+            const scaleY = canvas.height / height;
+            const scale = Math.min(scaleX, scaleY) * 0.9; // 留10%边距
+            
+            const offsetX = (canvas.width - width * scale) / 2;
+            const offsetY = (canvas.height - height * scale) / 2;
+            
+            // 转换坐标函数
+            const toCanvasX = (x) => (x - xmin) * scale + offsetX;
+            const toCanvasY = (y) => (ymax - y) * scale + offsetY; // Y轴翻转
+            
+            // 绘制已知障碍物
+            if (mapData.known_obstacles) {
+                ctx.fillStyle = '#666';
+                mapData.known_obstacles.forEach(obs => {
+                    const x = toCanvasX(obs[0]);
+                    const y = toCanvasY(obs[1]);
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+            
+            // 绘制未知障碍物
+            if (mapData.unknown_obstacles) {
+                ctx.fillStyle = '#ff9800';
+                mapData.unknown_obstacles.forEach(obs => {
+                    const x = toCanvasX(obs[0]);
+                    const y = toCanvasY(obs[1]);
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+            
+            // 绘制全局轨迹
+            if (globalTrajectory && globalTrajectory.length > 0) {
+                ctx.strokeStyle = '#4CAF50';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                for (let i = 0; i < globalTrajectory.length; i++) {
+                    const point = globalTrajectory[i];
+                    const x = toCanvasX(point[0]);
+                    const y = toCanvasY(point[1]);
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+            }
+            
+            // 绘制车辆
+            if (carState) {
+                const carX = toCanvasX(carState.x);
+                const carY = toCanvasY(carState.y);
+                
+                // 绘制车辆主体
+                ctx.save();
+                ctx.translate(carX, carY);
+                ctx.rotate(-carState.yaw); // 注意Y轴翻转，所以角度取反
+                
+                ctx.fillStyle = '#2196F3';
+                ctx.fillRect(-10, -5, 20, 10);
+                
+                // 绘制方向指示
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(5, -2, 5, 4);
+                
+                ctx.restore();
+                
+                // 绘制车辆位置点
+                ctx.fillStyle = '#2196F3';
+                ctx.beginPath();
+                ctx.arc(carX, carY, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        // 处理Canvas点击
+        function handleCanvasClick(event) {
+            if (!sessionId || !socket || !mapData || !isSettingGoal) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            
+            const bbox = mapData.bounding_box;
+            const [xmin, ymin, xmax, ymax] = bbox;
+            const width = xmax - xmin;
+            const height = ymax - ymin;
+            
+            const scaleX = canvas.width / width;
+            const scaleY = canvas.height / height;
+            const scale = Math.min(scaleX, scaleY) * 0.9;
+            
+            const offsetX = (canvas.width - width * scale) / 2;
+            const offsetY = (canvas.height - height * scale) / 2;
+            
+            // 转换回世界坐标
+            const worldX = (x - offsetX) / scale + xmin;
+            const worldY = ymax - (y - offsetY) / scale;
+            
+            // 计算从当前车辆位置到目标位置的航向角（参考 MainWindow._mouse_drag 第229行）
+            let goalYaw = 0;
+            if (carState) {
+                const dx = worldX - carState.x;
+                const dy = worldY - carState.y;
+                goalYaw = Math.atan2(dy, dx);  // 从当前位置指向目标位置的角度
+            }
+            
+            setGoal(worldX, worldY, goalYaw);
+            isSettingGoal = false;
+            document.getElementById('setGoalBtn').textContent = '设置目标点';
+        }
+        
+        // 设置目标点（参考 MainWindow._global_plan）
+        function setGoal(x, y, yaw) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/aeb2af75-cf93-49d9-8a26-77c89d62730f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'web_test.html:554',message:'setGoal called',data:{x:x,y:y,yaw:yaw,socket_connected:socket && socket.connected,has_sessionId:!!sessionId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
+            if (!socket || !sessionId) return;
+            
+            // 先刹车（参考 MainWindow._mouse_drag 第248行）
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/aeb2af75-cf93-49d9-8a26-77c89d62730f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'web_test.html:558',message:'emitting brake',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
+            socket.emit('brake', { session_id: sessionId });
+            
+            // 然后设置目标（参考 MainWindow._global_plan）
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/aeb2af75-cf93-49d9-8a26-77c89d62730f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'web_test.html:562',message:'emitting set_goal',data:{x:x,y:y,yaw:yaw},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
+            socket.emit('set_goal', {
+                session_id: sessionId,
+                x: x,
+                y: y,
+                yaw: yaw
+            });
+            
+            log(`设置目标点: (${x.toFixed(2)}, ${y.toFixed(2)}), 航向角: ${(yaw * 180 / Math.PI).toFixed(1)}°`, 'info');
+        }
+        
+        // 刹车
+        function brake() {
+            if (!socket || !sessionId) return;
+            socket.emit('brake', { session_id: sessionId });
+            log('执行刹车', 'info');
+        }
+        
+        // 取消
+        function cancel() {
+            if (!socket || !sessionId) return;
+            socket.emit('cancel', { session_id: sessionId });
+            log('取消仿真', 'info');
+        }
+        
+        // 重启
+        function restart() {
+            if (!socket || !sessionId) return;
+            socket.emit('restart', { session_id: sessionId });
+            log('重启仿真', 'info');
+        }
+        
+        // 启用控制按钮
+        function enableControls() {
+            document.getElementById('setGoalBtn').disabled = false;
+            document.getElementById('brakeBtn').disabled = false;
+            document.getElementById('cancelBtn').disabled = false;
+            document.getElementById('restartBtn').disabled = false;
+        }
+        
+        // 禁用控制按钮
+        function disableControls() {
+            document.getElementById('setGoalBtn').disabled = true;
+            document.getElementById('brakeBtn').disabled = true;
+            document.getElementById('cancelBtn').disabled = true;
+            document.getElementById('restartBtn').disabled = true;
+        }
+        
+        // 事件监听
+        document.getElementById('createSessionBtn').addEventListener('click', createSession);
+        document.getElementById('setGoalBtn').addEventListener('click', () => {
+            if (isSettingGoal) {
+                isSettingGoal = false;
+                document.getElementById('setGoalBtn').textContent = '设置目标点';
+                log('取消设置目标点', 'info');
+            } else {
+                isSettingGoal = true;
+                document.getElementById('setGoalBtn').textContent = '点击地图设置目标';
+                log('请点击地图设置目标点', 'info');
+            }
+        });
+        document.getElementById('brakeBtn').addEventListener('click', brake);
+        document.getElementById('cancelBtn').addEventListener('click', cancel);
+        document.getElementById('restartBtn').addEventListener('click', restart);
+        
+        // 初始化
+        try {
+            initCanvas();
+            log('界面初始化完成', 'success');
+            log(`API服务器地址: http://${API_HOST}:${API_PORT}`, 'info');
+            log('提示: 可通过URL参数指定地址，例如 ?host=192.168.1.100&port=5000', 'info');
+            log('请点击"创建会话"开始测试', 'info');
+        } catch (error) {
+            console.error('初始化错误:', error);
+            alert('页面初始化失败，请检查浏览器控制台');
+        }
+        
+        // 定期重绘（用于动画）
+        setInterval(() => {
+            if (ctx && mapData) {
+                drawMap();
+            }
+        }, 100);
+    </script>
+</body>
+</html>

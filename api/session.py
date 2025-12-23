@@ -123,7 +123,7 @@ class UserSession:
         # Collision detected -> Local planner brake
         self.event_bus.subscribe(TRAJECTORY_COLLIDED, self.local_planner.brake)
     
-        # Collision detected -> Replan (与 MainWindow 第170行一致)
+        # Collision detected -> Replan
         self.event_bus.subscribe(TRAJECTORY_COLLIDED, self._on_trajectory_collided)
 
     def _initialize(self) -> None:
@@ -257,6 +257,7 @@ class UserSession:
         self.global_planner.cancel()
         self.local_planner.brake()
         self.collision_checker.cancel()
+      
 
     def cancel(self) -> None:
         """
@@ -341,6 +342,8 @@ class UserSession:
         self.event_bus.subscribe(KNOWN_OBSTACLES_UPDATED, self._push_obstacles_updated)
         self.event_bus.subscribe(NEW_OBSTACLES_DISCOVERED, self._push_new_obstacles)
 
+        # display planning
+        self.event_bus.subscribe(GLOBAL_PLANNER_DISPLAY_SEGMENTS, self._push_display_segments)
     
     def _push_state_update(self, timestamp_s: float, state: Car) -> None:
         """推送车辆状态更新到WebSocket"""
@@ -384,4 +387,15 @@ class UserSession:
         
         self._socketio.emit('new_obstacles', {
             'obstacles': serialize_obstacles(new_obstacles)
+        }, room=self.session_id)
+    
+    def _push_display_segments(self, display_segments) -> None:
+        """推送全局规划中间结果到WebSocket"""
+        if self._socketio is None:
+            return
+        
+        serialized_segments = [serialize_trajectory(seg) for seg in display_segments]
+
+        self._socketio.emit('display_segments', {
+            'segments': serialized_segments
         }, room=self.session_id)

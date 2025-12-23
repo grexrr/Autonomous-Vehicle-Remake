@@ -84,7 +84,7 @@ class TrajectoryCollisionCheckingAdapter:
 
         # 创建碰撞检测器（丢弃前N个点）
         self._checker = TrajectoryCollisionChecker(trajectory[DISCARD_FIRST_N:, :3])
-        if self._known_obstacles:
+        if self._known_obstacles is not None:
             self._check_collision(self._known_obstacles)
 
 

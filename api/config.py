@@ -20,9 +20,7 @@ class DevelopmentConfig(Config):
     PORT = int(os.getenv('PORT', 5000))
 
     CORS_ORIGINS = [
-        'http://localhost:3000',  # React default
-        'http://localhost:5173',  # Vite default
-        'http://localhost:8080',  # Vue CLI default
+        'http://localhost:8080',  # For testing
     ]
 
     SOCKETIO_CORS_ALLOWED_ORIGINS = CORS_ORIGINS
