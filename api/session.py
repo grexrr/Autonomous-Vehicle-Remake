@@ -342,6 +342,9 @@ class UserSession:
         # global planning result
         self.event_bus.subscribe(GLOBAL_PLANNER_TRAJECTORY, self._push_global_trajectory)
 
+        # local planning trajectories
+        self.event_bus.subscribe(LOCAL_PLANNER_TRAJECTORIES, self._push_local_trajectories)
+
         # update map obstacles update
         self.event_bus.subscribe(KNOWN_OBSTACLES_UPDATED, self._push_obstacles_updated)
         self.event_bus.subscribe(NEW_OBSTACLES_DISCOVERED, self._push_new_obstacles)
@@ -350,7 +353,7 @@ class UserSession:
         self.event_bus.subscribe(GLOBAL_PLANNER_DISPLAY_SEGMENTS, self._push_display_segments)
     
     def _push_state_update(self, timestamp_s: float, state: Car) -> None:
-        """推送车辆状态更新到WebSocket"""
+        """Push vehicle state update to WebSocket"""
         if self._socketio is None:
             return
         
@@ -360,7 +363,7 @@ class UserSession:
         }, room=self.session_id)
     
     def _push_global_trajectory(self, trajectory) -> None:
-        """推送全局规划轨迹到WebSocket"""
+        """Push global planner trajectory to WebSocket"""
         if self._socketio is None:
             return
         
@@ -372,9 +375,20 @@ class UserSession:
             self._socketio.emit('goal_unreachable', {
                 'message': 'Goal is unreachable'
             }, room=self.session_id)
+    
+    def _push_local_trajectories(self, trajectories) -> None:
+        """Push local planner trajectories to WebSocket"""
+        if self._socketio is None:
+            return
+    
+        self._socketio.emit('local_trajectories', {
+            'local_trajectory': serialize_trajectory(trajectories.local_trajectory),
+            'reference_points': serialize_trajectory(trajectories.reference_points),
+            'brake_trajectory': serialize_trajectory(trajectories.brake_trajectory)
+        }, room=self.session_id)
         
     def _push_obstacles_updated(self, obstacles) -> None:
-        """推送障碍物更新到WebSocket"""
+        """Push updated obstacles to WebSocket"""
         if self._socketio is None:
             return
         
@@ -383,7 +397,7 @@ class UserSession:
         }, room=self.session_id)
     
     def _push_new_obstacles(self, new_obstacles) -> None:
-        """推送新发现的障碍物到WebSocket"""
+        """Push newly found obstacles to WebSocket"""
         if self._socketio is None:
             return
         
@@ -394,7 +408,7 @@ class UserSession:
         }, room=self.session_id)
     
     def _push_display_segments(self, display_segments) -> None:
-        """推送全局规划中间结果到WebSocket"""
+        """Push intermediate global planning segments to WebSocket"""
         if self._socketio is None:
             return
         
