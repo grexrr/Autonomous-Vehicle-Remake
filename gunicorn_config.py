@@ -8,7 +8,8 @@ workers = 1
 # Worker class
 # eventlet: supports asynchronous I/O, suitable for WebSocket
 # Make sure to install: pip install eventlet
-worker_class = "eventlet"
+worker_class = "gthread"
+thread = 4
 
 # Bind address and port
 # 0.0.0.0 means listen on all network interfaces

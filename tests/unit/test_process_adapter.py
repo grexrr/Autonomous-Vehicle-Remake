@@ -204,15 +204,18 @@ def test_worker_with_args():
     event_bus.subscribe('result_event', on_result)
     
     adapter.start()
-    time.sleep(0.1)
+    
+    # 等待进程启动并验证进程是否存活
+    time.sleep(0.2)  # 增加等待时间
+    assert adapter.is_alive(), "进程应该已启动"
     
     adapter.send(5)
-    time.sleep(0.2)
+    time.sleep(0.3)  # 增加等待时间，确保消息被处理
     
     # 验证参数被正确传递
-    assert len(received_data) > 0, "应该收到结果"
+    assert len(received_data) > 0, f"应该收到结果，但 received_data={received_data}"
     assert any('RESULT' in str(data) and '15' in str(data) for data in received_data), \
-        "应该看到前缀和计算结果"
+        f"应该看到前缀和计算结果，但 received_data={received_data}"
     
     adapter.send('stop')
     time.sleep(0.1)

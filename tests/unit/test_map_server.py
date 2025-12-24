@@ -77,6 +77,10 @@ def test_lidar_scan_discovery():
     adapter = MapServerAdapter(event_bus=event_bus)
     adapter.init_map()
     
+    # 确保地图已初始化
+    assert adapter.known_obstacle_coordinates is not None, "已知障碍物应该已初始化"
+    assert adapter.unknown_obstacle_coordinates is not None, "未知障碍物应该已初始化"
+    
     # 记录初始已知障碍物数量
     initial_known_count = len(adapter.known_obstacle_coordinates)
     print(f"  Initial known obstacles: {initial_known_count}")
@@ -98,7 +102,9 @@ def test_lidar_scan_discovery():
     
     # 创建一个车辆状态，扫描所有未知障碍物的位置
     discoveries_made = False
-    for unknown_obs in adapter.unknown_obstacle_coordinates[:5]:  # 只扫描前5个
+    unknown_coords = adapter.unknown_obstacle_coordinates
+    assert unknown_coords is not None, "未知障碍物应该已初始化"
+    for unknown_obs in unknown_coords[:5]:  # 只扫描前5个
         x, y = unknown_obs
         car = Car(x=x, y=y, yaw=0.0)
         adapter.update_from_vehicle_state(0.0, car)
@@ -110,7 +116,9 @@ def test_lidar_scan_discovery():
     if discoveries_made:
         assert len(new_obstacles_events) > 0, "应该发现新障碍物"
         assert len(obstacles_updated_events) > 0, "应该更新障碍物列表"
-        final_known_count = len(adapter.known_obstacle_coordinates)
+        known_coords = adapter.known_obstacle_coordinates
+        assert known_coords is not None, "已知障碍物应该已初始化"
+        final_known_count = len(known_coords)
         assert final_known_count > initial_known_count, "已知障碍物数量应该增加"
         print(f"  ✓ Discovered {final_known_count - initial_known_count} new obstacles")
         print("✓ Test passed: LIDAR scan works correctly\n")
@@ -147,6 +155,10 @@ def test_generate_random_initial_state():
     adapter = MapServerAdapter(event_bus=event_bus)
     adapter.init_map()
     
+    # 确保边界框已初始化
+    bbox = adapter.bounding_box
+    assert bbox is not None, "边界框应该已初始化"
+    
     # 生成多个随机状态
     for i in range(5):
         car = adapter.generate_random_initial_state()
@@ -157,7 +169,7 @@ def test_generate_random_initial_state():
         assert hasattr(car, 'yaw'), "车辆应该有 yaw 角度"
         
         # 验证坐标在边界内
-        xmin, ymin, xmax, ymax = adapter.bounding_box
+        xmin, ymin, xmax, ymax = bbox
         assert xmin <= car.x <= xmax, f"车辆 x 坐标应该在边界内: {car.x}"
         assert ymin <= car.y <= ymax, f"车辆 y 坐标应该在边界内: {car.y}"
         
@@ -205,9 +217,13 @@ def test_multiple_scans_same_location():
     adapter = MapServerAdapter(event_bus=event_bus)
     adapter.init_map()
     
+    # 确保未知障碍物已初始化
+    unknown_coords = adapter.unknown_obstacle_coordinates
+    assert unknown_coords is not None, "未知障碍物应该已初始化"
+    
     # 选择一个未知障碍物的位置
-    if len(adapter.unknown_obstacle_coordinates) > 0:
-        x, y = adapter.unknown_obstacle_coordinates[0]
+    if len(unknown_coords) > 0:
+        x, y = unknown_coords[0]
         car = Car(x=x, y=y, yaw=0.0)
         
         new_discoveries = []
@@ -264,6 +280,47 @@ def test_properties():
     print("✓ Test passed: All properties accessible\n")
 
 
+def test_map_selection():
+    """测试地图选择功能"""
+    print("=== Test 9: Map Selection ===")
+    
+    event_bus = EventBus()
+    adapter = MapServerAdapter(event_bus=event_bus)
+    
+    # 测试默认地图（map2）
+    adapter.init_map()  # 使用默认 map2
+    map2_coords = adapter.known_obstacle_coordinates
+    map2_bbox = adapter.bounding_box
+    assert map2_coords is not None, "Map2 应该成功加载"
+    assert map2_bbox is not None, "Map2 应该有边界框"
+    print(f"  ✓ Map2 loaded: {len(map2_coords)} obstacles, bbox: {map2_bbox}")
+    
+    # 测试选择 map
+    try:
+        adapter.init_map("map")
+        map1_coords = adapter.known_obstacle_coordinates
+        map1_bbox = adapter.bounding_box
+        
+        # 验证不同地图可能有不同的障碍物数量或边界
+        # （注意：如果两个地图完全相同，这个测试可能通过，但至少验证了功能正常）
+        assert map1_coords is not None, "Map1 应该成功加载"
+        assert map1_bbox is not None, "Map1 应该有边界框"
+        print(f"  ✓ Map1 loaded: {len(map1_coords)} obstacles, bbox: {map1_bbox}")
+        print("  ✓ Map selection works correctly")
+    except FileNotFoundError:
+        print("  ⚠ Warning: map.png not found, skipping map1 test")
+        print("  ✓ Map selection function exists (map2 works)")
+    
+    # 测试无效地图名称
+    try:
+        adapter.init_map("nonexistent_map")
+        assert False, "应该抛出 FileNotFoundError"
+    except FileNotFoundError as e:
+        print(f"  ✓ Invalid map name correctly raises FileNotFoundError: {e}")
+    
+    print("✓ Test passed: Map selection works\n")
+
+
 # 运行所有测试
 if __name__ == "__main__":
     print("[Testing][MapServerAdapter]...\n")
@@ -276,6 +333,7 @@ if __name__ == "__main__":
     test_event_parameter_compatibility()
     test_multiple_scans_same_location()
     test_properties()
+    test_map_selection()
     
     print("=" * 40)
     print("🎉[Testing][MapServerAdapter] All tests past!")

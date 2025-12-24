@@ -38,7 +38,7 @@ class UserSession:
     Each UserSession represents one independent simulation instance for one user.
     """
 
-    def __init__(self, session_id: str, initial_state: Optional[dict] = None) -> None:
+    def __init__(self, session_id: str, initial_state: Optional[dict] = None, map_name: str = "map2") -> None:
         """
         Initialize user session
         
@@ -48,6 +48,9 @@ class UserSession:
         self.session_id = session_id
         self._socketio = None
         self.event_bus = EventBus()
+
+        # map
+        self._map_name = map_name
 
         # init adapters
         self.map_server = MapServerAdapter(self.event_bus)
@@ -131,8 +134,7 @@ class UserSession:
         Initialize map and start all components
         """
         # Initialize map (this will trigger MAP_INITIALIZED event)
-        self.map_server.init_map()
-        
+        self.map_server.init_map(self._map_name)
         # Start all components
         self.car_simulation.start()
         self.global_planner.start()
@@ -233,6 +235,7 @@ class UserSession:
         if not self._is_initialized:
             raise RuntimeError("Map not initialized yet")
         
+        self.car_simulation.resume()
         self._goal_state = Car(x, y, yaw)
         
         start = self._measured_state
@@ -278,6 +281,7 @@ class UserSession:
         self._brake_trajectory = None
         self._goal_state = None
         self.map_server.init_map()
+        self.map_server.init_map(self._map_name)
 
     def get_state(self) -> Optional[tuple[float, Car]]:
         """

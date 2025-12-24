@@ -53,28 +53,33 @@ def _worker_process(pipe: Connection, delta_time_s: float) -> None:
     """
     
     mpc: Optional[ModelPredictiveControl] = None
-    while True:
-        match pipe.recv():
-            case _ParentMsgType.CANCEL:
-                mpc = None
-            
-            case _ParentMsgType.TRAJECTORY, trajectory:
-                mpc = ModelPredictiveControl(trajectory)
-            
-            case _ParentMsgType.BRAKE:
-                if mpc is not None:
-                    mpc.brake()
+    try:
+        while True:
+            match pipe.recv():
+                case _ParentMsgType.CANCEL:
+                    mpc = None
+                
+                case _ParentMsgType.TRAJECTORY, trajectory:
+                    mpc = ModelPredictiveControl(trajectory)
+                
+                case _ParentMsgType.BRAKE:
+                    if mpc is not None:
+                        mpc.brake()
 
-            case _ParentMsgType.STATE, (timestamp_s, state):
-                # 收到车辆状态，执行 MPC 更新
-                # 检查是否有新消息（丢弃过时数据）或 MPC 未初始化
+                case _ParentMsgType.STATE, (timestamp_s, state):
+                    # 收到车辆状态，执行 MPC 更新
+                    # 检查是否有新消息（丢弃过时数据）或 MPC 未初始化
 
-                if pipe.poll() or not mpc:
-                    continue
+                    if pipe.poll() or not mpc:
+                        continue
 
-                result = mpc.update(state, delta_time_s)
-                pipe.send((timestamp_s, state, result))
-
+                    result = mpc.update(state, delta_time_s)
+                    pipe.send((timestamp_s, state, result))
+    except (EOFError, KeyboardInterrupt, OSError):
+        pass
+    except Exception as e:
+        print(f"[LocalPlanner Worker] Error: {e}")
+        
 class LocalPlannerAdapter:
     """
     LocalPlanner Adapter

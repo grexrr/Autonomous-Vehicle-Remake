@@ -7,8 +7,8 @@ import numpy.typing as npt
 import scipy.interpolate
 
 import sys
-from pathlib import Path as _Path
-_project_root = _Path(__file__).parent.parent.parent
+from pathlib import Path
+_project_root = Path(__file__).parent.parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
@@ -19,8 +19,8 @@ from api.event_types import *
 from .event_bus import EventBus
 
 READ_FROM_FILE = True
-MAP_FILE = _project_root / "AutonomousVehicle" / "map" / "map2.png"
 METER_PER_PIXEL = 0.1
+# MAP_FILE = _project_root / "AutonomousVehicle" / "map" / "map2.png"
 
 def _generate_obstacles() -> npt.NDArray[np.floating[Any]]:
     """Generate obstacle coordinates programmatically"""
@@ -43,11 +43,11 @@ def _generate_obstacles() -> npt.NDArray[np.floating[Any]]:
     return np.vstack((np.concatenate(ox), np.concatenate(oy))).T
 
 
-def _read_map() -> npt.NDArray[np.floating[Any]]:
+def _read_map(map_file: Path) -> npt.NDArray[np.floating[Any]]:
     """Read map obstacles from image file"""
-    src = cv.imread(str(MAP_FILE), cv.IMREAD_GRAYSCALE)
+    src = cv.imread(str(map_file), cv.IMREAD_GRAYSCALE)
     if src is None:
-        raise FileNotFoundError(f"Cannot read map file: {MAP_FILE}")
+        raise FileNotFoundError(f"Cannot read map file: {map_file}")
     src = cv.threshold(src, 127, 255, cv.THRESH_BINARY)[1]
     H, W = src.shape[:2]
     boundary = np.array([[0, 0], [W, 0], [W, H], [0, H]])
@@ -92,6 +92,7 @@ class MapServerAdapter:
         self._unknown_obstacles = None
         self._havent_discovered = None
         self._bounding_box = None
+        self._map_file = None
 
     @property
     def known_obstacle_coordinates(self) -> npt.NDArray[np.floating[Any]] | None:
@@ -106,17 +107,27 @@ class MapServerAdapter:
         """Get map boundary (xmin, ymin, xmax, ymax)"""
         return self._bounding_box
 
-    def init_map(self) -> None:
+    def init_map(self, map_name: str = "map2") -> None:
         """
         Initialize map data:
 
         1. Load map obstacles
         2. Generate random hidden obstacles
         3. Publish map initialization complete event
+
+        Args:
+            map_name: Map file name ("map" or "map2" or "map3" and etc), default "map2"
         """
+
+        _project_root = Path(__file__).parent.parent.parent
+        map_file = _project_root / "AutonomousVehicle" / "map" / f"{map_name}.png"
+        self._map_file = map_file
+
+        if not map_file.exists():
+            raise FileNotFoundError(f"Map file not found: {map_file}")
         
         # 1. load or generate known obstacles
-        self._known_obstacle_coordinates = coords = _read_map() if READ_FROM_FILE else _generate_obstacles()
+        self._known_obstacle_coordinates = coords = _read_map(map_file) if READ_FROM_FILE else _generate_obstacles()
 
         # 2. get map boundary
         xmin, ymin, xmax, ymax = coords[:, 0].min(), coords[:, 1].min(), coords[:, 0].max(), coords[:, 1].max()

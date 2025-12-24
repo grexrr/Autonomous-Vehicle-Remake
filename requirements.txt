@@ -1,12 +1,20 @@
+# Core dependencies
 numpy
 scipy
 rsplan
 cvxpy
 psutil
 opencv-python
+
+# Web framework
 flask
 flask-cors
 flask-socketio
+werkzeug>=2.3.0,<3.0.0  # 明确指定版本避免冲突
 eventlet
 gunicorn
 python-dotenv
+
+# Testing
+pytest
+pytest-cov

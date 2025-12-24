@@ -1,3 +1,5 @@
+import re
+
 from flask import Blueprint, jsonify, request
 from typing import Dict, Any
 from api.simulation_manager import SimulationManager
@@ -44,14 +46,22 @@ def create_session():
     # acquire JSON sent by clients
     data = request.get_json() or {}
     initial_state = data.get('initial_state')
-
+    map_name = data.get('map_name', 'map2')
+    
+    
+    if not re.match(r'^map\d*$', str(map_name)):
+        return jsonify({
+            'error': f'Invalid map_name: {map_name}. Must be "map" or "map2".'
+        }), 400
+    
     # Session management
-    session_id = manager.create_session(initial_state)
+    session_id = manager.create_session(initial_state, map_name)
 
     return jsonify({
         'session_id': session_id,
         'status': 'created',
-        'message': f'Session {session_id} created successfully'
+        'map_name': map_name,
+        'message': f'Session {session_id} created successfully with map {map_name}'
     }), 201
 
 

@@ -45,12 +45,13 @@ class SimulationManager:
         self._initialized = True
 
     
-    def create_session(self, initial_state: Optional[dict] = None) -> str:
+    def create_session(self, initial_state: Optional[dict] = None, map_name: str = "map2") -> str:
         """
         Create a new session
 
         Args:
             initial_state: Optional initial state, e.g. {"x": 5.0, "y": 5.0, "yaw": 0.0}
+             map_name: Map file name ("map" or "map2" or "map3"), default "map2"
 
         Returns:
             session_id: Newly created session ID
@@ -59,7 +60,8 @@ class SimulationManager:
         session_id = str(uuid.uuid4())
         user_session = UserSession(
             session_id=session_id, 
-            initial_state=initial_state
+            initial_state=initial_state,
+            map_name=map_name
         )
 
         with self._sessions_lock:
