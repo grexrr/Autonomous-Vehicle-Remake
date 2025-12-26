@@ -3,7 +3,7 @@ from flask_socketio import disconnect, emit, join_room
 
 from api.event_types import (
     WS_CONNECT, WS_DISCONNECT, WS_SET_GOAL, WS_SET_STATE, WS_BRAKE, WS_CANCEL, WS_RESTART,
-    WS_ERROR, WS_CONNECTED, WS_STATE_UPDATE, WS_MAP_DATA, WS_GOAL_SET, WS_STATE_SET,
+    WS_ERROR, WS_CONNECTED, WS_RECONNECTED, WS_STATE_UPDATE, WS_MAP_DATA, WS_GOAL_SET, WS_STATE_SET,
     WS_BRAKED, WS_CANCELED, WS_RESTARTED
 )
 from api.simulation_manager import SimulationManager
@@ -56,12 +56,25 @@ def register_handlers():
         
         join_room(session_id)
 
+        # 检测是否是重连：如果 session 已经有 socketio 注册，说明是重连
+        is_reconnect = session._socketio is not None
+        
         session.register_websocket_push(socketio)
-        emit(WS_CONNECTED, {
-            'session_id': session_id,
-            'message': 'Connected successfully'
-        })
+        
+        if is_reconnect:
+            # 重连成功，发送重连事件
+            emit(WS_RECONNECTED, {
+                'session_id': session_id,
+                'message': 'Reconnected successfully'
+            })
+        else:
+            # 首次连接
+            emit(WS_CONNECTED, {
+                'session_id': session_id,
+                'message': 'Connected successfully'
+            })
 
+        # 重连时也需要重新发送当前状态和地图数据
         state = session.get_state()
         if state:
             ts, c = state

@@ -340,23 +340,38 @@ class UserSession:
         Args:
             socketio_instance: SocketIO instance
         """
+        # 如果已经有 socketio 注册，说明是重连，不需要重新订阅事件
+        is_reconnect = self._socketio is not None
+        
         self._socketio = socketio_instance
 
-        # subscribe car stat event, 推送车辆状态更新到WebSocket
-        self.event_bus.subscribe(MEASURED_STATE, self._push_state_update)
+        # 只有在首次连接时才订阅事件（避免重复订阅）
+        if not is_reconnect:
+            # subscribe car stat event, 推送车辆状态更新到WebSocket
+            self.event_bus.subscribe(MEASURED_STATE, self._push_state_update)
 
-        # global planning result
-        self.event_bus.subscribe(GLOBAL_PLANNER_TRAJECTORY, self._push_global_trajectory)
+            # global planning result
+            self.event_bus.subscribe(GLOBAL_PLANNER_TRAJECTORY, self._push_global_trajectory)
 
-        # local planning trajectories
-        self.event_bus.subscribe(LOCAL_PLANNER_TRAJECTORIES, self._push_local_trajectories)
+            # local planning trajectories
+            self.event_bus.subscribe(LOCAL_PLANNER_TRAJECTORIES, self._push_local_trajectories)
 
-        # update map obstacles update
-        self.event_bus.subscribe(KNOWN_OBSTACLES_UPDATED, self._push_obstacles_updated)
-        self.event_bus.subscribe(NEW_OBSTACLES_DISCOVERED, self._push_new_obstacles)
+            # update map obstacles update
+            self.event_bus.subscribe(KNOWN_OBSTACLES_UPDATED, self._push_obstacles_updated)
+            self.event_bus.subscribe(NEW_OBSTACLES_DISCOVERED, self._push_new_obstacles)
 
-        # display planning
-        self.event_bus.subscribe(GLOBAL_PLANNER_DISPLAY_SEGMENTS, self._push_display_segments)
+            # display planning
+            self.event_bus.subscribe(GLOBAL_PLANNER_DISPLAY_SEGMENTS, self._push_display_segments)
+    
+    def unregister_websocket_push(self) -> None:
+        """
+        Unregister WebSocket push
+        
+        Called when client disconnects to clean up the connection reference.
+        Note: Event bus subscriptions are not unsubscribed here as they may be needed
+        for other purposes. The _socketio reference is cleared to allow reconnection detection.
+        """
+        self._socketio = None
     
     def _push_state_update(self, timestamp_s: float, state: Car) -> None:
         """Push vehicle state update to WebSocket"""

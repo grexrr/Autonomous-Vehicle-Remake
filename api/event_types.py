@@ -26,6 +26,8 @@ WS_RESTART = 'restart'
 # WebSocket server-to-client events (events emitted by server)
 WS_ERROR = 'error'
 WS_CONNECTED = 'connected'
+WS_RECONNECTED = 'reconnected'
+WS_RECONNECT_ATTEMPT = 'reconnect_attempt'
 WS_STATE_UPDATE = 'state_update'
 WS_MAP_DATA = 'map_data'
 WS_GOAL_SET = 'goal_set'
