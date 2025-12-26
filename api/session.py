@@ -21,7 +21,14 @@ from AutonomousVehicle.constants import *
 from api.adapters.car_simulation import CarSimulationAdapter
 from api.adapters.event_bus import EventBus
 from api.adapters.map_server import MapServerAdapter
-from api.event_types import *
+from api.event_types import (
+    MEASURED_STATE, MAP_INITIALIZED, KNOWN_OBSTACLES_UPDATED, NEW_OBSTACLES_DISCOVERED,
+    GLOBAL_PLANNER_DISPLAY_SEGMENTS, GLOBAL_PLANNER_TRAJECTORY, GLOBAL_PLANNER_FINISHED,
+    LOCAL_PLANNER_CONTROL_SEQUENCE, LOCAL_PLANNER_TRAJECTORIES,
+    TRAJECTORY_COLLIDED,
+    WS_STATE_UPDATE, WS_GLOBAL_TRAJECTORY, WS_GOAL_UNREACHABLE,
+    WS_LOCAL_TRAJECTORIES, WS_OBSTACLES_UPDATED, WS_NEW_OBSTACLES, WS_DISPLAY_SEGMENTS
+)
 
 REPLAN_MAX_SPEED = 5 / 3.6 
 
@@ -280,7 +287,6 @@ class UserSession:
         self.cancel()
         self._brake_trajectory = None
         self._goal_state = None
-        self.map_server.init_map()
         self.map_server.init_map(self._map_name)
 
     def get_state(self) -> Optional[tuple[float, Car]]:
@@ -357,7 +363,7 @@ class UserSession:
         if self._socketio is None:
             return
         
-        self._socketio.emit('state_update', {
+        self._socketio.emit(WS_STATE_UPDATE, {
             'timestamp': timestamp_s,
             'car': serialize_car(state)
         }, room=self.session_id)
@@ -368,11 +374,11 @@ class UserSession:
             return
         
         if trajectory is not None:
-            self._socketio.emit('global_trajectory', {
+            self._socketio.emit(WS_GLOBAL_TRAJECTORY, {
                 'trajectory': serialize_trajectory(trajectory)
             }, room=self.session_id)
         else:
-            self._socketio.emit('goal_unreachable', {
+            self._socketio.emit(WS_GOAL_UNREACHABLE, {
                 'message': 'Goal is unreachable'
             }, room=self.session_id)
     
@@ -381,7 +387,7 @@ class UserSession:
         if self._socketio is None:
             return
     
-        self._socketio.emit('local_trajectories', {
+        self._socketio.emit(WS_LOCAL_TRAJECTORIES, {
             'local_trajectory': serialize_trajectory(trajectories.local_trajectory),
             'reference_points': serialize_trajectory(trajectories.reference_points),
             'brake_trajectory': serialize_trajectory(trajectories.brake_trajectory)
@@ -392,7 +398,7 @@ class UserSession:
         if self._socketio is None:
             return
         
-        self._socketio.emit('obstacles_updated', {
+        self._socketio.emit(WS_OBSTACLES_UPDATED, {
             'obstacles': serialize_obstacles(obstacles)
         }, room=self.session_id)
     
@@ -403,7 +409,7 @@ class UserSession:
         
         from api.utils import serialize_obstacles
         
-        self._socketio.emit('new_obstacles', {
+        self._socketio.emit(WS_NEW_OBSTACLES, {
             'obstacles': serialize_obstacles(new_obstacles)
         }, room=self.session_id)
     
@@ -414,6 +420,6 @@ class UserSession:
         
         serialized_segments = [serialize_trajectory(seg) for seg in display_segments]
 
-        self._socketio.emit('display_segments', {
+        self._socketio.emit(WS_DISPLAY_SEGMENTS, {
             'segments': serialized_segments
         }, room=self.session_id)

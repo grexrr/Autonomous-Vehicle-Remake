@@ -1,8 +1,11 @@
-from multiprocessing import managers
 from flask import request
 from flask_socketio import disconnect, emit, join_room
 
-from api import session
+from api.event_types import (
+    WS_CONNECT, WS_DISCONNECT, WS_SET_GOAL, WS_SET_STATE, WS_BRAKE, WS_CANCEL, WS_RESTART,
+    WS_ERROR, WS_CONNECTED, WS_STATE_UPDATE, WS_MAP_DATA, WS_GOAL_SET, WS_STATE_SET,
+    WS_BRAKED, WS_CANCELED, WS_RESTARTED
+)
 from api.simulation_manager import SimulationManager
 from api.utils import serialize_car
 
@@ -24,7 +27,7 @@ def register_handlers():
     if socketio is None:
         raise RuntimeError("SocketIO instance not initialized.")
     
-    @socketio.on('connect')
+    @socketio.on(WS_CONNECT)
     def handle_connect(auth):
         """Handle Client Connection"""
         
@@ -39,7 +42,7 @@ def register_handlers():
             session_id = request.args.get('session_id')
         
         if not session_id:
-            emit('error', {'message': 'session_id is requrired'})
+            emit(WS_ERROR, {'message': 'session_id is requrired'})
             disconnect()
             return False
     
@@ -47,14 +50,14 @@ def register_handlers():
         session = manager.get_session(session_id)
 
         if session is None:
-            emit('error', {'message': f'Session {session_id} not found'})
+            emit(WS_ERROR, {'message': f'Session {session_id} not found'})
             disconnect()
             return False
         
         join_room(session_id)
 
         session.register_websocket_push(socketio)
-        emit('connected', {
+        emit(WS_CONNECTED, {
             'session_id': session_id,
             'message': 'Connected successfully'
         })
@@ -62,33 +65,33 @@ def register_handlers():
         state = session.get_state()
         if state:
             ts, c = state
-            emit('state_update', {
+            emit(WS_STATE_UPDATE, {
                 'timestamp': ts,
                 'car': serialize_car(c)
             })
         
         map_data = session.get_map_data()
-        emit('map_data', map_data)
+        emit(WS_MAP_DATA, map_data)
 
         return True
     
-    @socketio.on('disconnect')
+    @socketio.on(WS_DISCONNECT)
     def handle_disconnect(reason=None):
         pass
 
-    @socketio.on('set_goal')
+    @socketio.on(WS_SET_GOAL)
     def handle_set_goal(data):
         """Handle set destination goal"""
         session_id = data.get('session_id')
         if not session_id:
-            emit('error', {'message': 'session_id is required'})
+            emit(WS_ERROR, {'message': 'session_id is required'})
             return
         
         manager = SimulationManager()
         session = manager.get_session(session_id)
 
         if session is None:
-            emit('error', {'message': f'Session {session_id} not found'})
+            emit(WS_ERROR, {'message': f'Session {session_id} not found'})
             return
         
         try:
@@ -98,28 +101,28 @@ def register_handlers():
 
             session.set_goal(x, y, yaw)
 
-            emit ('goal_set', {
+            emit(WS_GOAL_SET, {
                 'x': x,
                 'y': y,
                 'yaw': yaw,
                 'message': 'Goal set successfully'
             })
         except Exception as e:
-            emit('error', {'message': f'Session {session_id} failed to set goal: {str(e)}'})
+            emit(WS_ERROR, {'message': f'Session {session_id} failed to set goal: {str(e)}'})
 
-    @socketio.on('set_state')
+    @socketio.on(WS_SET_STATE)
     def handle_set_state(data):
         """Handle set vehicle state"""
         session_id = data.get('session_id')
         if not session_id:
-            emit('error', {'message': 'session_id is required'})
+            emit(WS_ERROR, {'message': 'session_id is required'})
             return
         
         manager = SimulationManager()
         session = manager.get_session(session_id)
 
         if session is None:
-            emit('error', {'message': f'Session {session_id} not found'})
+            emit(WS_ERROR, {'message': f'Session {session_id} not found'})
             return
         
         try:
@@ -129,16 +132,16 @@ def register_handlers():
             
             session.set_state(x, y, yaw)
             
-            emit('state_set', {
+            emit(WS_STATE_SET, {
                 'x': x,
                 'y': y,
                 'yaw': yaw,
                 'message': 'State set successfully'
             })
         except Exception as e:
-            emit('error', {'message': f'Session {session_id} failed to set state: {str(e)}'})
+            emit(WS_ERROR, {'message': f'Session {session_id} failed to set state: {str(e)}'})
     
-    @socketio.on('brake')
+    @socketio.on(WS_BRAKE)
     def handle_brake(data=None):
         """Handle brake command"""
         session_id = None
@@ -149,23 +152,23 @@ def register_handlers():
             session_id = request.args.get('session_id')
         
         if not session_id:
-            emit('error', {'message': 'session_id is required'})
+            emit(WS_ERROR, {'message': 'session_id is required'})
             return
 
         manager = SimulationManager()
         session = manager.get_session(session_id)
 
         if session is None:
-            emit('error', {'message': f'Session {session_id} not found'})
+            emit(WS_ERROR, {'message': f'Session {session_id} not found'})
             return
         
         try:
             session.brake()
-            emit('braked', {'message': 'Brake applied'})
+            emit(WS_BRAKED, {'message': 'Brake applied'})
         except Exception as e:
-            emit('error', {'message': f'Session {session_id} failed to brake: {str(e)}'})
+            emit(WS_ERROR, {'message': f'Session {session_id} failed to brake: {str(e)}'})
 
-    @socketio.on('cancel')
+    @socketio.on(WS_CANCEL)
     def handle_cancel(data=None):
         """处理取消命令"""
         session_id = None
@@ -176,23 +179,23 @@ def register_handlers():
             session_id = request.args.get('session_id')
         
         if not session_id:
-            emit('error', {'message': 'session_id is required'})
+            emit(WS_ERROR, {'message': 'session_id is required'})
             return
         
         manager = SimulationManager()
         session = manager.get_session(session_id)
         
         if session is None:
-            emit('error', {'message': f'Session {session_id} not found'})
+            emit(WS_ERROR, {'message': f'Session {session_id} not found'})
             return
         
         try:
             session.cancel()
-            emit('canceled', {'message': 'Simulation canceled'})
+            emit(WS_CANCELED, {'message': 'Simulation canceled'})
         except Exception as e:
-            emit('error', {'message': f'Session {session_id} failed to cancel: {str(e)}'})
+            emit(WS_ERROR, {'message': f'Session {session_id} failed to cancel: {str(e)}'})
 
-    @socketio.on('restart')
+    @socketio.on(WS_RESTART)
     def handle_restart(data=None):
         """处理重启命令"""
         session_id = None
@@ -203,18 +206,18 @@ def register_handlers():
             session_id = request.args.get('session_id')
         
         if not session_id:
-            emit('error', {'message': 'session_id is required'})
+            emit(WS_ERROR, {'message': 'session_id is required'})
             return
         
         manager = SimulationManager()
         session = manager.get_session(session_id)
         
         if session is None:
-            emit('error', {'message': f'Session {session_id} not found'})
+            emit(WS_ERROR, {'message': f'Session {session_id} not found'})
             return
         
         try:
             session.restart()
-            emit('restarted', {'message': 'Simulation restarted'})
+            emit(WS_RESTARTED, {'message': 'Simulation restarted'})
         except Exception as e:
-            emit('error', {'message': f'Session {session_id} failed to restart: {str(e)}'})
+            emit(WS_ERROR, {'message': f'Session {session_id} failed to restart: {str(e)}'})
