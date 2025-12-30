@@ -316,9 +316,58 @@ def test_handle_restart():
     print("✓ Test passed\n")
 
 
+def test_handle_resume():
+    """测试继续处理器"""
+    print("=== Test 11: Handle Resume ===")
+    
+    # 创建测试环境
+    manager = SimulationManager()
+    session_id = manager.create_session()
+    session = manager.get_session(session_id)
+    assert session is not None, "Session 应该存在"
+    
+    # 等待地图初始化
+    max_wait = 5.0
+    start_time = time.time()
+    while time.time() - start_time < max_wait:
+        if session._is_initialized:
+            break
+        time.sleep(0.1)
+    
+    # 设置状态和目标
+    session.set_state(x=10.0, y=10.0, yaw=0.0)
+    time.sleep(0.2)
+    
+    try:
+        session.set_goal(x=20.0, y=20.0, yaw=0.0)
+        time.sleep(0.3)
+    except RuntimeError:
+        pass
+    
+    # 先刹车
+    session.brake()
+    assert session._local_planning == False, "刹车后应该停止局部规划"
+    
+    # 测试继续
+    try:
+        session.resume()
+        print("  继续命令执行成功")
+        
+        # 验证车辆仿真已恢复（resume() 会设置 _stopped = False）
+        assert session.car_simulation._stopped == False, "继续后车辆仿真应该恢复（_stopped = False）"
+    except RuntimeError as e:
+        print(f"  继续命令失败（可能地图未初始化）: {e}")
+    
+    # 清理
+    manager.delete_session(session_id)
+    time.sleep(0.2)
+    
+    print("✓ Test passed\n")
+
+
 def test_handle_connect_with_invalid_session():
     """测试使用无效 session_id 连接应该失败"""
-    print("=== Test 11: Connect with Invalid Session ===")
+    print("=== Test 12: Connect with Invalid Session ===")
     
     # 测试无效的 session_id
     invalid_session_id = "invalid_session_12345"
@@ -333,7 +382,7 @@ def test_handle_connect_with_invalid_session():
 
 def test_handle_set_goal_with_invalid_data():
     """测试使用无效数据设置目标"""
-    print("=== Test 12: Set Goal with Invalid Data ===")
+    print("=== Test 13: Set Goal with Invalid Data ===")
     
     # 创建测试环境
     manager = SimulationManager()
@@ -381,6 +430,7 @@ if __name__ == '__main__':
         test_handle_brake()
         test_handle_cancel()
         test_handle_restart()
+        test_handle_resume()
         test_handle_connect_with_invalid_session()
         test_handle_set_goal_with_invalid_data()
         

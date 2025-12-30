@@ -266,9 +266,61 @@ def test_restart():
     print("✓ Test passed\n")
 
 
+def test_resume():
+    """测试继续功能"""
+    print("=== Test 8: Resume ===")
+    
+    session = UserSession(session_id="test_session_8_resume")
+    
+    # 等待地图初始化
+    max_wait = 5.0
+    start_time = time.time()
+    while time.time() - start_time < max_wait:
+        if session._is_initialized:
+            break
+        time.sleep(0.1)
+    
+    # 设置状态和目标
+    session.set_state(x=10.0, y=10.0, yaw=0.0)
+    time.sleep(0.2)
+    
+    try:
+        session.set_goal(x=20.0, y=20.0, yaw=0.0)
+        time.sleep(0.3)
+    except RuntimeError:
+        pass
+    
+    # 先刹车
+    session.brake()
+    assert session._local_planning == False, "刹车后应该停止局部规划"
+    
+    # 记录继续前的状态
+    stopped_before = session.car_simulation._stopped
+    
+    # 调用继续
+    try:
+        session.resume()
+        
+        # 验证车辆仿真已恢复（resume() 会设置 _stopped = False）
+        assert session.car_simulation._stopped == False, "继续后车辆仿真应该恢复（_stopped = False）"
+        
+        # 如果有目标状态，应该会触发重新规划
+        if session._goal_state is not None:
+            print("  继续后应该触发重新规划（如果有目标状态）")
+    except RuntimeError as e:
+        # 如果地图未初始化，会抛出 RuntimeError
+        print(f"  继续失败（可能地图未初始化）: {e}")
+    
+    # 清理
+    session.stop()
+    time.sleep(0.2)
+    
+    print("✓ Test passed\n")
+
+
 def test_get_state():
     """测试获取状态"""
-    print("=== Test 8: Get State ===")
+    print("=== Test 9: Get State ===")
     
     session = UserSession(session_id="test_session_8")
     
@@ -308,7 +360,7 @@ def test_get_state():
 
 def test_get_map_data():
     """测试获取地图数据"""
-    print("=== Test 9: Get Map Data ===")
+    print("=== Test 10: Get Map Data ===")
     
     session = UserSession(session_id="test_session_9")
     
@@ -328,6 +380,7 @@ def test_get_map_data():
     assert 'bounding_box' in map_data, "应该包含 bounding_box"
     assert 'known_obstacles' in map_data, "应该包含 known_obstacles"
     assert 'unknown_obstacles' in map_data, "应该包含 unknown_obstacles"
+    assert 'vehicle_params' in map_data, "应该包含 vehicle_params"
     
     # 验证边界框
     bbox = map_data['bounding_box']
@@ -340,9 +393,34 @@ def test_get_map_data():
     assert isinstance(map_data['known_obstacles'], list), "已知障碍物应该是列表"
     assert isinstance(map_data['unknown_obstacles'], list), "未知障碍物应该是列表"
     
+    # 验证车辆参数
+    vehicle_params = map_data['vehicle_params']
+    assert isinstance(vehicle_params, dict), "vehicle_params 应该是字典"
+    
+    # 验证必需的车辆参数字段
+    required_params = [
+        'length', 'width', 'wheel_base', 'wheel_length', 'wheel_width',
+        'wheel_spacing', 'back_to_wheel', 'back_to_center', 'scan_radius',
+        'collision_length', 'collision_width', 'collision_radius'
+    ]
+    for param in required_params:
+        assert param in vehicle_params, f"vehicle_params 应该包含 {param}"
+        assert isinstance(vehicle_params[param], (int, float)), f"{param} 应该是数字类型"
+        assert vehicle_params[param] > 0, f"{param} 应该是正数"
+    
+    # 验证参数值的合理性（与 Car 类中的常量值对比）
+    assert abs(vehicle_params['length'] - Car.LENGTH) < 0.001, "length 应该匹配 Car.LENGTH"
+    assert abs(vehicle_params['width'] - Car.WIDTH) < 0.001, "width 应该匹配 Car.WIDTH"
+    assert abs(vehicle_params['wheel_base'] - Car.WHEEL_BASE) < 0.001, "wheel_base 应该匹配 Car.WHEEL_BASE"
+    assert abs(vehicle_params['scan_radius'] - Car.SCAN_RADIUS) < 0.001, "scan_radius 应该匹配 Car.SCAN_RADIUS"
+    
     print(f"  边界框: {bbox}")
     print(f"  已知障碍物数量: {len(map_data['known_obstacles'])}")
     print(f"  未知障碍物数量: {len(map_data['unknown_obstacles'])}")
+    print(f"  车辆长度: {vehicle_params['length']} m")
+    print(f"  车辆宽度: {vehicle_params['width']} m")
+    print(f"  轴距: {vehicle_params['wheel_base']} m")
+    print(f"  扫描半径: {vehicle_params['scan_radius']} m")
     
     # 清理
     session.stop()
@@ -353,7 +431,7 @@ def test_get_map_data():
 
 def test_stop():
     """测试停止功能"""
-    print("=== Test 10: Stop ===")
+    print("=== Test 11: Stop ===")
     
     session = UserSession(session_id="test_session_10")
     
@@ -389,7 +467,7 @@ def test_stop():
 
 def test_event_handlers():
     """测试事件处理器"""
-    print("=== Test 11: Event Handlers ===")
+    print("=== Test 12: Event Handlers ===")
     
     session = UserSession(session_id="test_session_11")
     
@@ -429,7 +507,7 @@ def test_event_handlers():
 
 def test_trajectory_collision_replan():
     """测试轨迹碰撞重规划"""
-    print("=== Test 12: Trajectory Collision Replan ===")
+    print("=== Test 13: Trajectory Collision Replan ===")
     
     session = UserSession(session_id="test_session_12")
     
@@ -478,7 +556,7 @@ def test_trajectory_collision_replan():
 
 def test_register_websocket_push():
     """测试注册 WebSocket 推送"""
-    print("=== Test 13: Register WebSocket Push ===")
+    print("=== Test 14: Register WebSocket Push ===")
     
     session = UserSession(session_id="test_session_13")
     
@@ -508,7 +586,7 @@ def test_register_websocket_push():
 
 def test_push_state_update():
     """测试推送状态更新到 WebSocket"""
-    print("=== Test 14: Push State Update ===")
+    print("=== Test 15: Push State Update ===")
     
     session = UserSession(session_id="test_session_14")
     
@@ -553,7 +631,7 @@ def test_push_state_update():
 
 def test_push_global_trajectory_success():
     """测试推送全局轨迹（成功情况）"""
-    print("=== Test 15: Push Global Trajectory (Success) ===")
+    print("=== Test 16: Push Global Trajectory (Success) ===")
     
     session = UserSession(session_id="test_session_15")
     
@@ -597,7 +675,7 @@ def test_push_global_trajectory_success():
 
 def test_push_global_trajectory_failure():
     """测试推送全局轨迹（失败情况 - 目标不可达）"""
-    print("=== Test 16: Push Global Trajectory (Failure) ===")
+    print("=== Test 17: Push Global Trajectory (Failure) ===")
     
     session = UserSession(session_id="test_session_16")
     
@@ -638,7 +716,7 @@ def test_push_global_trajectory_failure():
 
 def test_push_obstacles_updated():
     """测试推送障碍物更新"""
-    print("=== Test 17: Push Obstacles Updated ===")
+    print("=== Test 18: Push Obstacles Updated ===")
     
     session = UserSession(session_id="test_session_17")
     
@@ -682,7 +760,7 @@ def test_push_obstacles_updated():
 
 def test_push_new_obstacles():
     """测试推送新发现的障碍物"""
-    print("=== Test 18: Push New Obstacles ===")
+    print("=== Test 19: Push New Obstacles ===")
     
     session = UserSession(session_id="test_session_18")
     
@@ -726,7 +804,7 @@ def test_push_new_obstacles():
 
 def test_push_without_socketio():
     """测试在没有 socketio 时推送应该安全返回"""
-    print("=== Test 19: Push Without SocketIO ===")
+    print("=== Test 20: Push Without SocketIO ===")
     
     session = UserSession(session_id="test_session_19")
     
@@ -768,6 +846,7 @@ if __name__ == '__main__':
         test_brake()
         test_cancel()
         test_restart()
+        test_resume()
         test_get_state()
         test_get_map_data()
         test_stop()

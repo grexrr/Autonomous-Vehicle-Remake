@@ -227,8 +227,20 @@ class UserSession:
             y: Initial y coordinate (meters)
             yaw: Initial yaw angle (radians)
         """
+        # Clear destination and cancel ongoing planning
+        self._goal_state = None
+        self._local_planning = False
+        self._brake_trajectory = None
+        self.global_planner.cancel()
+        self.local_planner.brake()
+        self.collision_checker.cancel()
+
         state = Car(x, y, yaw)
         self.car_simulation.set_state(state)
+
+        # reset scan state and scan around the new start position
+        self.map_server.reset_discovery(state)
+        
     
     def set_goal(self, x: float, y: float, yaw: float) -> None:
         """
@@ -268,6 +280,32 @@ class UserSession:
         self.local_planner.brake()
         self.collision_checker.cancel()
       
+    def resume(self) -> None:
+        """
+        Resume simulation after brake
+        If there's a goal state, replan from current state
+        """
+        if not self._is_initialized:
+            raise RuntimeError("Map not initialized yet")
+        
+        # 恢复车辆仿真
+        self.car_simulation.resume()
+        
+        # 如果有目标状态，重新规划
+        if self._goal_state is not None:
+            start = self._measured_state
+            if start is None:
+                return
+            
+            if abs(start.velocity) > REPLAN_MAX_SPEED and self._brake_trajectory is not None:
+                start = self._brake_trajectory
+            
+            coords = self.map_server.known_obstacle_coordinates
+            if coords is None:
+                return
+            
+            obstacles = Obstacles(coords)
+            self.global_planner.plan(start, self._goal_state, obstacles)
 
     def cancel(self) -> None:
         """
@@ -288,6 +326,9 @@ class UserSession:
         self._brake_trajectory = None
         self._goal_state = None
         self.map_server.init_map(self._map_name)
+        self.car_simulation.start()
+        self.global_planner.start()
+        self.local_planner.start()
 
     def get_state(self) -> Optional[tuple[float, Car]]:
         """
@@ -303,14 +344,28 @@ class UserSession:
         Get map data for visualization
         
         Returns:
-            Dictionary containing map information
+            Dictionary containing map information and vehicle parameters
         """
         known_coords = self.map_server.known_obstacle_coordinates
         unknown_coords = self.map_server.unknown_obstacle_coordinates
         return {
             'bounding_box': self.map_server.bounding_box,
             'known_obstacles': serialize_obstacles(known_coords),
-            'unknown_obstacles': serialize_obstacles(unknown_coords)
+            'unknown_obstacles': serialize_obstacles(unknown_coords),
+            'vehicle_params': {
+                'length': float(Car.LENGTH),
+                'width': float(Car.WIDTH),
+                'wheel_base': float(Car.WHEEL_BASE),
+                'wheel_length': float(Car.WHEEL_LENGTH),
+                'wheel_width': float(Car.WHEEL_WIDTH),
+                'wheel_spacing': float(Car.WHEEL_SPACING),
+                'back_to_wheel': float(Car.BACK_TO_WHEEL),
+                'back_to_center': float(Car.BACK_TO_CENTER),
+                'scan_radius': float(Car.SCAN_RADIUS),
+                'collision_length': float(Car.COLLISION_LENGTH),
+                'collision_width': float(Car.COLLISION_WIDTH),
+                'collision_radius': float(Car.COLLISION_RADIUS)
+            }
         }
 
     def stop(self) -> None:

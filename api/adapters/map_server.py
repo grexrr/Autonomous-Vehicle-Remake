@@ -87,6 +87,7 @@ class MapServerAdapter:
 
     def __init__(self, event_bus: EventBus) -> None:
         self._event_bus = event_bus
+        self._map_obstacle_coordinates = None
         self._known_obstacle_coordinates = None
         self._unknown_obstacle_coordinates = None
         self._unknown_obstacles = None
@@ -127,7 +128,8 @@ class MapServerAdapter:
             raise FileNotFoundError(f"Map file not found: {map_file}")
         
         # 1. load or generate known obstacles
-        self._known_obstacle_coordinates = coords = _read_map(map_file) if READ_FROM_FILE else _generate_obstacles()
+        self._map_obstacle_coordinates = coords = _read_map(map_file) if READ_FROM_FILE else _generate_obstacles()
+        self._known_obstacle_coordinates = coords.copy()
 
         # 2. get map boundary
         xmin, ymin, xmax, ymax = coords[:, 0].min(), coords[:, 1].min(), coords[:, 0].max(), coords[:, 1].max()
@@ -143,6 +145,24 @@ class MapServerAdapter:
         # 4. publish event
         self._event_bus.emit(MAP_INITIALIZED)
         self._event_bus.emit(KNOWN_OBSTACLES_UPDATED, self._known_obstacle_coordinates)
+
+    def reset_discovery(self, state: Car) -> None:
+        """
+        Reset discovery status and re-scan around a new start position.
+
+        Args:
+            state: Current vehicle state used as the scan origin.
+        """
+        if (self._map_obstacle_coordinates is None or
+            self._unknown_obstacle_coordinates is None):
+            return
+
+        self._known_obstacle_coordinates = self._map_obstacle_coordinates.copy()
+        self._havent_discovered = np.ones(len(self._unknown_obstacle_coordinates), dtype=bool)
+        self._event_bus.emit(KNOWN_OBSTACLES_UPDATED, self._known_obstacle_coordinates)
+
+        cy, sy = np.cos(state.yaw), np.sin(state.yaw)
+        self._lidar_scan(state.x + cy * Car.BACK_TO_CENTER, state.y + sy * Car.BACK_TO_CENTER)
 
     def _lidar_scan(self, x: float, y: float) -> None:
         """
