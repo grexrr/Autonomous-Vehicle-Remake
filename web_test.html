@@ -243,6 +243,7 @@
         let carState = null;
         let globalTrajectory = null;
         let isSettingGoal = false;
+        let isClosingSession = false;
         
         // 初始化Canvas
         function initCanvas() {
@@ -379,6 +380,12 @@
                 disableControls();
             });
 
+            socket.on('connect_error', (error) => {
+                updateConnectionStatus('disconnected', '连接失败');
+                log(`WebSocket连接失败: ${error.message}`, 'error');
+                disableControls();
+            });
+
             socket.on('error', (data) => {
                 log(`错误: ${data.message}`, 'error');
             });
@@ -433,6 +440,14 @@
                 displaySegments = data.segments;
                 log('收到规划中间结果', 'info');
                 drawMap(); // 重新绘制地图，显示规划过程
+            });
+
+            socket.on('session_closed', (data) => {
+                sessionId = null;
+                document.getElementById('sessionId').textContent = '-';
+                updateConnectionStatus('disconnected', '会话已关闭');
+                disableControls();
+                log(`会话已关闭: ${data.session_id}`, 'info');
             });
         }
         
@@ -622,6 +637,22 @@
             socket.emit('restart', { session_id: sessionId });
             log('重启仿真', 'info');
         }
+
+        // 关闭会话（用于页面关闭时清理服务端会话）
+        function closeSession() {
+            if (!sessionId || isClosingSession) return;
+            isClosingSession = true;
+            const payload = { session_id: sessionId };
+
+            if (socket && socket.connected) {
+                socket.emit('close_session', payload);
+            } else {
+                fetch(`${API_BASE}/session/${sessionId}`, {
+                    method: 'DELETE',
+                    keepalive: true
+                }).catch(() => {});
+            }
+        }
         
         // 启用控制按钮
         function enableControls() {
@@ -667,6 +698,15 @@
             console.error('初始化错误:', error);
             alert('页面初始化失败，请检查浏览器控制台');
         }
+
+        window.addEventListener('beforeunload', (event) => {
+            if (!sessionId) {
+                return;
+            }
+            closeSession();
+            event.preventDefault();
+            event.returnValue = '';
+        });
         
         // 定期重绘（用于动画）
         setInterval(() => {

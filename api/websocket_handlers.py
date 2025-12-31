@@ -4,8 +4,9 @@ from flask_socketio import disconnect, emit, join_room
 
 from api.event_types import (
     WS_CONNECT, WS_DISCONNECT, WS_SET_GOAL, WS_SET_STATE, WS_BRAKE, WS_CANCEL, WS_RESTART, WS_RESUME,
+    WS_CLOSE_SESSION,
     WS_ERROR, WS_CONNECTED, WS_RECONNECTED, WS_STATE_UPDATE, WS_MAP_DATA, WS_GOAL_SET, WS_STATE_SET,
-    WS_BRAKED, WS_CANCELED, WS_RESTARTED, WS_RESUMED
+    WS_BRAKED, WS_CANCELED, WS_RESTARTED, WS_RESUMED, WS_SESSION_CLOSED
 )
 from api.simulation_manager import SimulationManager
 from api.utils import serialize_car
@@ -121,6 +122,44 @@ def register_handlers():
             # 断开时 request 可能不可用，需要异常处理
             # 使用 print 而不是 logging，因为这是关键错误
             print(f"Error in handle_disconnect: {e}")
+
+    @socketio.on(WS_CLOSE_SESSION)
+    def handle_close_session(data=None):
+        """Handle session close request from client"""
+        session_id = None
+
+        if data:
+            session_id = data.get('session_id')
+        else:
+            session_id = request.args.get('session_id')
+
+        if not session_id:
+            emit(WS_ERROR, {'message': 'session_id is required'})
+            return
+
+        manager = SimulationManager()
+        session = manager.get_session(session_id)
+
+        if session is None:
+            emit(WS_ERROR, {'message': f'Session {session_id} not found'})
+            return
+
+        # Remove sid mapping to avoid leaking entries
+        sid = getattr(request, 'sid', None)
+        if sid:
+            with _sid_lock:
+                _sid_to_session_id.pop(sid, None)
+
+        # Stop and delete the session before notifying the client
+        manager.delete_session(session_id)
+
+        emit(WS_SESSION_CLOSED, {
+            'session_id': session_id,
+            'message': 'Session closed successfully'
+        })
+
+        # Close the socket after notifying the client
+        disconnect()
 
     @socketio.on(WS_SET_GOAL)
     def handle_set_goal(data):
