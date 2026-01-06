@@ -11,7 +11,7 @@ flask
 flask-cors
 flask-socketio
 werkzeug>=2.3.0,<3.0.0  # 明确指定版本避免冲突
-eventlet
+simple-websocket
 gunicorn
 python-dotenv
 

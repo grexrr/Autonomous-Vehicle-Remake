@@ -19,4 +19,4 @@ COPY . .
 EXPOSE 5000
 
 # Run
-CMD ["gunicorn", "--config", "gunicorn_config.py", "api.app:app"]
+CMD ["gunicorn", "--config", "gunicorn_config.py", "api.wsgi:app"]

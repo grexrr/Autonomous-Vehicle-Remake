@@ -7,13 +7,8 @@ import os
 workers = 1
 
 # Worker class
-# eventlet: supports asynchronous I/O, suitable for WebSocket
-_env = os.getenv('FLASK_ENV', 'development')
-if _env == 'production':
-    worker_class = "eventlet"
-else:
-    worker_class = "gthread"
-    thread = 4
+worker_class = "gthread"
+thread = 4
 
 # Bind address and port
 # 0.0.0.0 means listen on all network interfaces
@@ -22,10 +17,13 @@ bind = "0.0.0.0:5000"
 
 # Request timeout (seconds)
 # Global planning algorithms may take longer, so this is set higher
-timeout = 120
+timeout = 300
 
-# Access log format
+# Access log
+accesslog= "-"
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"'
 
 # Logging level
 loglevel = "info"
+
+preload_app = False

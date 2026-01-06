@@ -5,9 +5,12 @@ from .config import config
 from .websocket_handlers import init_websocket_handlers
 import os
 
-# import eventlet
-# print(f"[DEBUG] Eventlet version: {eventlet.__version__}")
-# print(f"[DEBUG] Eventlet patched socket: {eventlet.patcher.is_monkey_patched('socket')}")
+import multiprocessing as mp
+
+try:
+    mp.set_start_method("spawn", force=True)
+except RuntimeError:
+    pass
 
 
 socketio = None
@@ -31,15 +34,11 @@ def create_app(config_name='development'):
     CORS(app, origins=app.config['CORS_ORIGINS'])
 
     # 3. init SocketIO (for WebSocket Transmission)
-    if config_name == 'production':
-        async_mode = 'eventlet'
-    else:
-        async_mode = 'threading'
 
     socketio = SocketIO(
         app,
         cors_allowed_origins=app.config['SOCKETIO_CORS_ALLOWED_ORIGINS'],
-        async_mode=async_mode,
+        async_mode='threading',
         transports=['websocket'],  # force websocket to avoid long-poll fallback issues
         ping_timeout=300,          # allow longer idle before timing out
         ping_interval=20,           # send ping a bit more frequently
