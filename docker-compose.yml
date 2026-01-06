@@ -1,13 +1,13 @@
-version: '3.8'
-
 services:
   api:
     build: .
     ports:
-      - "5000:5000"
+      - "${PORT:-5000}:5000"
     environment:
-      - FLASK_ENV=production
-      - PORT=5000
+      - FLASK_ENV=${FLASK_ENV:-development}
+      - PORT=${PORT:-5000}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+      - SECRET_KEY=${SECRET_KEY:-}
     volumes:
       - .:/app
     container_name: autonomous-vehicle-api

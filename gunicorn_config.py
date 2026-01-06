@@ -8,7 +8,7 @@ workers = 1
 
 # Worker class
 worker_class = "gthread"
-thread = 4
+threads = 4
 
 # Bind address and port
 # 0.0.0.0 means listen on all network interfaces
