@@ -31,10 +31,15 @@ def create_app(config_name='development'):
     CORS(app, origins=app.config['CORS_ORIGINS'])
 
     # 3. init SocketIO (for WebSocket Transmission)
+    if config_name == 'production':
+        async_mode = 'eventlet'
+    else:
+        async_mode = 'threading'
+
     socketio = SocketIO(
         app,
         cors_allowed_origins=app.config['SOCKETIO_CORS_ALLOWED_ORIGINS'],
-        async_mode='threading',
+        async_mode=async_mode,
         transports=['websocket'],  # force websocket to avoid long-poll fallback issues
         ping_timeout=300,          # allow longer idle before timing out
         ping_interval=20,           # send ping a bit more frequently
@@ -51,6 +56,5 @@ def create_app(config_name='development'):
 
     return app
 
-import os
 _app_env = os.getenv('FLASK_ENV', 'development')
 app = create_app(_app_env)

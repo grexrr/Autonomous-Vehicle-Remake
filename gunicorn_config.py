@@ -1,3 +1,4 @@
+import os
 # Gunicorn Production Environment Configuration
 
 # Number of worker processes
@@ -7,9 +8,12 @@ workers = 1
 
 # Worker class
 # eventlet: supports asynchronous I/O, suitable for WebSocket
-# Make sure to install: pip install eventlet
-worker_class = "gthread"
-thread = 4
+_env = os.getenv('FLASK_ENV', 'development')
+if _env == 'production':
+    worker_class = "eventlet"
+else:
+    worker_class = "gthread"
+    thread = 4
 
 # Bind address and port
 # 0.0.0.0 means listen on all network interfaces
