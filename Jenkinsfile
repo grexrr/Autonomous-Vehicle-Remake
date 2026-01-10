@@ -79,9 +79,10 @@ pipeline {
                                             "set -e",
                                             "cd /home/ubuntu/autonomous-vehicle",
                                             "test -f .env || touch .env",
-                                            "OLD_TAG=`grep -E \\"^IMAGE_TAG=\\" .env | tail -n 1 | cut -d= -f2- || true`",
-                                            "if [ -n \\"\\$OLD_TAG\\" ]; then if grep -qE \\"^PREV_IMAGE_TAG=\\" .env; then sed -i \\"s/^PREV_IMAGE_TAG=.*/PREV_IMAGE_TAG=\\$OLD_TAG/\\" .env; else echo \\"PREV_IMAGE_TAG=\\$OLD_TAG\\" >> .env; fi; fi",
-                                            "if grep -qE \\"^IMAGE_TAG=\\" .env; then sed -i \\"s/^IMAGE_TAG=.*/IMAGE_TAG=${imageTag}/\\" .env; else echo \\"IMAGE_TAG=${imageTag}\\" >> .env; fi",
+                                            "OLD_TAG=\\$(grep -E \\"^IMAGE_TAG=\\" .env | tail -n 1 | cut -d= -f2- || true)",
+                                            "if [ -n \\"\\\\$OLD_TAG\\" ]; then if grep -qE \\"^PREV_IMAGE_TAG=\\" .env; then sed -i \\"s/^PREV_IMAGE_TAG=.*/PREV_IMAGE_TAG=\\\\$OLD_TAG/\\" .env; else echo \\"PREV_IMAGE_TAG=\\\\$OLD_TAG\\" >> .env; fi; fi",
+                                            "if grep -qE \\"^IMAGE_TAG=\\" .env; then sed -i \\"s/^IMAGE_TAG=.*/IMAGE_TAG=${env.IMAGE_TAG}/\\" .env; else echo \\"IMAGE_TAG=${env.IMAGE_TAG}\\" >> .env; fi",
+                                            "cat .env | egrep \\"^(IMAGE_TAG|PREV_IMAGE_TAG)=\\" || true",
                                             "docker compose config | grep image",
                                             "docker compose pull",
                                             "docker compose up -d --remove-orphans",
@@ -155,12 +156,10 @@ pipeline {
                                             "set -e",
                                             "cd /home/ubuntu/autonomous-vehicle",
                                             "test -f .env || (echo \\".env missing\\" && exit 2)",
-
-                                            "PREV=`grep -E \\"^PREV_IMAGE_TAG=\\" .env | tail -n 1 | cut -d= -f2- || true`",
-                                            "if [ -z \\"\\$PREV\\" ]; then echo \\"No PREV_IMAGE_TAG found, cannot rollback\\"; exit 3; fi",
-
-                                            "if grep -qE \\"^IMAGE_TAG=\\" .env; then sed -i \\"s/^IMAGE_TAG=.*/IMAGE_TAG=\\$PREV/\\" .env; else echo \\"IMAGE_TAG=\\$PREV\\" >> .env; fi",
-
+                                            "PREV=\\$(grep -E \\"^PREV_IMAGE_TAG=\\" .env | tail -n 1 | cut -d= -f2- || true)",
+                                            "if [ -z \\"\\\\$PREV\\" ]; then echo \\"No PREV_IMAGE_TAG found, cannot rollback\\"; exit 3; fi",
+                                            "if grep -qE \\"^IMAGE_TAG=\\" .env; then sed -i \\"s/^IMAGE_TAG=.*/IMAGE_TAG=\\\\$PREV/\\" .env; else echo \\"IMAGE_TAG=\\\\$PREV\\" >> .env; fi",
+                                            "cat .env | egrep \\"^(IMAGE_TAG|PREV_IMAGE_TAG)=\\" || true",
                                             "docker compose pull",
                                             "docker compose up -d --remove-orphans",
                                             "curl -fsS http://localhost:5000/api/vehicle/health"
