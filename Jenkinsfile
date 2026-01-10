@@ -63,156 +63,194 @@ pipeline {
                     credentialsId: "${env.AWS_CRED_ID}"
                 ]]){
                     script {
+                        // 设置环境变量，供 shell 脚本使用
+                        env.DEPLOY_REGION = env.AWS_DEFAULT_REGION
+                        env.DEPLOY_INSTANCE_ID = env.INSTANCE_ID
+                        env.DEPLOY_IMAGE_TAG = env.IMAGE_TAG
+                        
                         try {
-                            def region = env.AWS_DEFAULT_REGION
-                            def instanceId = env.INSTANCE_ID
-                            def imageTag = env.IMAGE_TAG
-                            
+                            // 使用 --cli-input-json 文件方式，避免 Groovy 字符串插值问题
                             def cmdId = sh(
                                 returnStdout: true,
-                                script: """
-                                    aws ssm send-command \\
-                                        --region '${region}' \\
-                                        --document-name "AWS-RunShellScript" \\
-                                        --instance-ids '${instanceId}' \\
-                                        --parameters 'commands=[
-                                            "set -e",
-                                            "cd /home/ubuntu/autonomous-vehicle",
-                                            "test -f .env || touch .env",
-                                            "OLD_TAG=\\$(grep -E \\"^IMAGE_TAG=\\" .env | tail -n 1 | cut -d= -f2- || true)",
-                                            "if [ -n \\"\\\\$OLD_TAG\\" ]; then if grep -qE \\"^PREV_IMAGE_TAG=\\" .env; then sed -i \\"s/^PREV_IMAGE_TAG=.*/PREV_IMAGE_TAG=\\\\$OLD_TAG/\\" .env; else echo \\"PREV_IMAGE_TAG=\\\\$OLD_TAG\\" >> .env; fi; fi",
-                                            "if grep -qE \\"^IMAGE_TAG=\\" .env; then sed -i \\"s/^IMAGE_TAG=.*/IMAGE_TAG=${env.IMAGE_TAG}/\\" .env; else echo \\"IMAGE_TAG=${env.IMAGE_TAG}\\" >> .env; fi",
-                                            "cat .env | egrep \\"^(IMAGE_TAG|PREV_IMAGE_TAG)=\\" || true",
-                                            "docker compose config | grep image",
-                                            "docker compose pull",
-                                            "docker compose up -d --remove-orphans",
-                                            "curl -fsS http://localhost:5000/api/vehicle/health",
-                                            "docker image prune -af --filter \\"until=168h\\""
-                                        ]' \\
+                                script: '''
+                                    set -e
+                                    
+                                    # 生成 JSON 文件（使用单引号 heredoc 避免 shell 变量替换，然后手动替换）
+                                    cat > /tmp/ssm-deploy.json << 'DEPLOY_EOF'
+                                    {
+                                      "DocumentName": "AWS-RunShellScript",
+                                      "InstanceIds": ["INSTANCE_ID_PLACEHOLDER"],
+                                      "Parameters": {
+                                        "commands": [
+                                          "set -e",
+                                          "cd /home/ubuntu/autonomous-vehicle",
+                                          "test -f .env || touch .env",
+                                          "OLD_TAG=$(grep -E \"^IMAGE_TAG=\" .env | tail -n 1 | cut -d= -f2- || true)",
+                                          "if [ -n \"$OLD_TAG\" ]; then if grep -qE \"^PREV_IMAGE_TAG=\" .env; then sed -i \"s/^PREV_IMAGE_TAG=.*/PREV_IMAGE_TAG=$OLD_TAG/\" .env; else echo \"PREV_IMAGE_TAG=$OLD_TAG\" >> .env; fi; fi",
+                                          "if grep -qE \"^IMAGE_TAG=\" .env; then sed -i \"s/^IMAGE_TAG=.*/IMAGE_TAG=IMAGE_TAG_PLACEHOLDER/\" .env; else echo \"IMAGE_TAG=IMAGE_TAG_PLACEHOLDER\" >> .env; fi",
+                                          "docker compose config | grep image",
+                                          "docker compose pull",
+                                          "docker compose up -d --remove-orphans",
+                                          "curl -fsS http://localhost:5000/api/vehicle/health",
+                                          "docker image prune -af --filter \"until=168h\""
+                                        ]
+                                      }
+                                    }
+                                    DEPLOY_EOF
+                                    
+                                    # 替换占位符
+                                    sed -i "s/INSTANCE_ID_PLACEHOLDER/$DEPLOY_INSTANCE_ID/g" /tmp/ssm-deploy.json
+                                    sed -i "s/IMAGE_TAG_PLACEHOLDER/$DEPLOY_IMAGE_TAG/g" /tmp/ssm-deploy.json
+                                    
+                                    # 调用 AWS CLI
+                                    aws ssm send-command \
+                                        --region "$DEPLOY_REGION" \
+                                        --cli-input-json file:///tmp/ssm-deploy.json \
                                         --query "Command.CommandId" --output text
-                                """
+                                    
+                                    # 清理临时文件
+                                    rm -f /tmp/ssm-deploy.json
+                                '''
                             ).trim()
 
                             echo "SSM CommandId: ${cmdId}"
+                            
+                            env.DEPLOY_CMD_ID = cmdId
 
-                            sh """
-                                aws ssm wait command-executed \\
-                                    --region '${region}' \\
-                                    --command-id '${cmdId}' \\
-                                    --instance-id '${instanceId}'
-                            """
+                            sh '''
+                                aws ssm wait command-executed \
+                                    --region "$DEPLOY_REGION" \
+                                    --command-id "$DEPLOY_CMD_ID" \
+                                    --instance-id "$DEPLOY_INSTANCE_ID"
+                            '''
 
                             def status = sh(
                                 returnStdout: true,
-                                script: """
-                                    aws ssm get-command-invocation \\
-                                        --region '${region}' \\
-                                        --command-id '${cmdId}' \\
-                                        --instance-id '${instanceId}' \\
+                                script: '''
+                                    aws ssm get-command-invocation \
+                                        --region "$DEPLOY_REGION" \
+                                        --command-id "$DEPLOY_CMD_ID" \
+                                        --instance-id "$DEPLOY_INSTANCE_ID" \
                                         --query "Status" --output text
-                                """
+                                '''
                             ).trim()
 
                             def out = sh(
                                 returnStdout: true, 
-                                script: """
-                                    aws ssm get-command-invocation \\
-                                        --region '${region}' \\
-                                        --command-id '${cmdId}' \\
-                                        --instance-id '${instanceId}' \\
+                                script: '''
+                                    aws ssm get-command-invocation \
+                                        --region "$DEPLOY_REGION" \
+                                        --command-id "$DEPLOY_CMD_ID" \
+                                        --instance-id "$DEPLOY_INSTANCE_ID" \
                                         --query "StandardOutputContent" --output text
-                                """
+                                '''
                             ).trim()
 
                             def err = sh(
                                 returnStdout: true, 
-                                script: """
-                                    aws ssm get-command-invocation \\
-                                        --region '${region}' \\
-                                        --command-id '${cmdId}' \\
-                                        --instance-id '${instanceId}' \\
+                                script: '''
+                                    aws ssm get-command-invocation \
+                                        --region "$DEPLOY_REGION" \
+                                        --command-id "$DEPLOY_CMD_ID" \
+                                        --instance-id "$DEPLOY_INSTANCE_ID" \
                                         --query "StandardErrorContent" --output text
-                                """
+                                '''
                             ).trim()
 
                             echo "SSM Status: ${status}"
-                            echo "STDOUT:\\n${out}"
-                            if (err && err != 'None') echo "STDERR:\\n${err}"
+                            echo "STDOUT:\n${out}"
+                            if (err && err != 'None') echo "STDERR:\n${err}"
                             if (status != 'Success') error("Deploy failed: ${status}")
                         } catch (e) {
                             echo "Deploy failed, starting rollback... Reason: ${e}"
                             
-                            def region = env.AWS_DEFAULT_REGION
-                            def instanceId = env.INSTANCE_ID
-                            
+                            // 回滚也使用 --cli-input-json 方式
                             def rbCmdId = sh(
                                 returnStdout: true,
-                                script: """
-                                    aws ssm send-command \\
-                                        --region '${region}' \\
-                                        --document-name "AWS-RunShellScript" \\
-                                        --instance-ids '${instanceId}' \\
-                                        --parameters 'commands=[
-                                            "set -e",
-                                            "cd /home/ubuntu/autonomous-vehicle",
-                                            "test -f .env || (echo \\".env missing\\" && exit 2)",
-                                            "PREV=\\$(grep -E \\"^PREV_IMAGE_TAG=\\" .env | tail -n 1 | cut -d= -f2- || true)",
-                                            "if [ -z \\"\\\\$PREV\\" ]; then echo \\"No PREV_IMAGE_TAG found, cannot rollback\\"; exit 3; fi",
-                                            "if grep -qE \\"^IMAGE_TAG=\\" .env; then sed -i \\"s/^IMAGE_TAG=.*/IMAGE_TAG=\\\\$PREV/\\" .env; else echo \\"IMAGE_TAG=\\\\$PREV\\" >> .env; fi",
-                                            "cat .env | egrep \\"^(IMAGE_TAG|PREV_IMAGE_TAG)=\\" || true",
-                                            "docker compose pull",
-                                            "docker compose up -d --remove-orphans",
-                                            "curl -fsS http://localhost:5000/api/vehicle/health"
-                                            ]' \\
+                                script: '''
+                                    set -e
+                                    
+                                    # 生成回滚 JSON 文件（使用单引号 heredoc 避免 shell 变量替换）
+                                    cat > /tmp/ssm-rollback.json << 'ROLLBACK_EOF'
+                                    {
+                                      "DocumentName": "AWS-RunShellScript",
+                                      "InstanceIds": ["INSTANCE_ID_PLACEHOLDER"],
+                                      "Parameters": {
+                                        "commands": [
+                                          "set -e",
+                                          "cd /home/ubuntu/autonomous-vehicle",
+                                          "test -f .env || (echo \".env missing\" && exit 2)",
+                                          "PREV=$(grep -E \"^PREV_IMAGE_TAG=\" .env | tail -n 1 | cut -d= -f2- || true)",
+                                          "if [ -z \"$PREV\" ]; then echo \"No PREV_IMAGE_TAG found, cannot rollback\"; exit 3; fi",
+                                          "if grep -qE \"^IMAGE_TAG=\" .env; then sed -i \"s/^IMAGE_TAG=.*/IMAGE_TAG=$PREV/\" .env; else echo \"IMAGE_TAG=$PREV\" >> .env; fi",
+                                          "docker compose pull",
+                                          "docker compose up -d --remove-orphans",
+                                          "curl -fsS http://localhost:5000/api/vehicle/health"
+                                        ]
+                                      }
+                                    }
+                                    ROLLBACK_EOF
+                                    
+                                    # 替换占位符
+                                    sed -i "s/INSTANCE_ID_PLACEHOLDER/$DEPLOY_INSTANCE_ID/g" /tmp/ssm-rollback.json
+                                    
+                                    # 调用 AWS CLI
+                                    aws ssm send-command \
+                                        --region "$DEPLOY_REGION" \
+                                        --cli-input-json file:///tmp/ssm-rollback.json \
                                         --query "Command.CommandId" --output text
-                                    """
-                                ).trim()
+                                    
+                                    # 清理临时文件
+                                    rm -f /tmp/ssm-rollback.json
+                                '''
+                            ).trim()
 
                             echo "SSM CommandId (rollback): ${rbCmdId}"
+                            
+                            env.ROLLBACK_CMD_ID = rbCmdId
 
-                            sh """
-                                aws ssm wait command-executed \\
-                                    --region '${region}' \\
-                                    --command-id '${rbCmdId}' \\
-                                    --instance-id '${instanceId}'
-                            """
+                            sh '''
+                                aws ssm wait command-executed \
+                                    --region "$DEPLOY_REGION" \
+                                    --command-id "$ROLLBACK_CMD_ID" \
+                                    --instance-id "$DEPLOY_INSTANCE_ID"
+                            '''
 
                             def rbStatus = sh(
                                 returnStdout: true, 
-                                script: """
-                                    aws ssm get-command-invocation \\
-                                        --region '${region}' \\
-                                        --command-id '${rbCmdId}' \\
-                                        --instance-id '${instanceId}' \\
+                                script: '''
+                                    aws ssm get-command-invocation \
+                                        --region "$DEPLOY_REGION" \
+                                        --command-id "$ROLLBACK_CMD_ID" \
+                                        --instance-id "$DEPLOY_INSTANCE_ID" \
                                         --query "Status" --output text
-                                """
+                                '''
                             ).trim()
 
                             def rbOut = sh(
                                 returnStdout: true, 
-                                script: """
-                                    aws ssm get-command-invocation \\
-                                        --region '${region}' \\
-                                        --command-id '${rbCmdId}' \\
-                                        --instance-id '${instanceId}' \\
+                                script: '''
+                                    aws ssm get-command-invocation \
+                                        --region "$DEPLOY_REGION" \
+                                        --command-id "$ROLLBACK_CMD_ID" \
+                                        --instance-id "$DEPLOY_INSTANCE_ID" \
                                         --query "StandardOutputContent" --output text
-                                """
+                                '''
                             ).trim()
 
                             def rbErr = sh(
                                 returnStdout: true, 
-                                script: """
-                                    aws ssm get-command-invocation \\
-                                        --region '${region}' \\
-                                        --command-id '${rbCmdId}' \\
-                                        --instance-id '${instanceId}' \\
+                                script: '''
+                                    aws ssm get-command-invocation \
+                                        --region "$DEPLOY_REGION" \
+                                        --command-id "$ROLLBACK_CMD_ID" \
+                                        --instance-id "$DEPLOY_INSTANCE_ID" \
                                         --query "StandardErrorContent" --output text
-                                """
+                                '''
                             ).trim()
 
                             echo "SSM Status (rollback): ${rbStatus}"
                             echo "STDOUT (rollback):\n${rbOut}"
-    
                             if (rbErr && rbErr != 'None') echo "STDERR (rollback):\n${rbErr}"
                             if (rbStatus != 'Success') {
                                 error("Deploy failed AND rollback failed: ${rbStatus}")
