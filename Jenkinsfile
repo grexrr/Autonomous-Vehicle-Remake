@@ -64,26 +64,30 @@ pipeline {
                 ]]){
                     script {
                         try {
+                            def region = env.AWS_DEFAULT_REGION
+                            def instanceId = env.INSTANCE_ID
+                            def imageTag = env.IMAGE_TAG
+                            
                             def cmdId = sh(
                                 returnStdout: true,
                                 script: """
-                                    aws ssm send-command \
-                                        --region "${env.AWS_DEFAULT_REGION}" \
-                                        --document-name "AWS-RunShellScript" \
-                                        --instance-ids "${env.INSTANCE_ID}" \
+                                    aws ssm send-command \\
+                                        --region "${region}" \\
+                                        --document-name "AWS-RunShellScript" \\
+                                        --instance-ids "${instanceId}" \\
                                         --parameters 'commands=[
                                             "set -e",
                                             "cd /home/ubuntu/autonomous-vehicle",
                                             "test -f .env || touch .env",
                                             "OLD_TAG=\\$(grep -E \\"^IMAGE_TAG=\\" .env | tail -n 1 | cut -d= -f2- || true)",
                                             "if [ -n \\"\\$OLD_TAG\\" ]; then if grep -qE \\"^PREV_IMAGE_TAG=\\" .env; then sed -i \\"s/^PREV_IMAGE_TAG=.*/PREV_IMAGE_TAG=\\$OLD_TAG/\\" .env; else echo \\"PREV_IMAGE_TAG=\\$OLD_TAG\\" >> .env; fi; fi",
-                                            "if grep -qE \\"^IMAGE_TAG=\\" .env; then sed -i \\"s/^IMAGE_TAG=.*/IMAGE_TAG=${env.IMAGE_TAG}/\\" .env; else echo \\"IMAGE_TAG=${env.IMAGE_TAG}\\" >> .env; fi",
+                                            "if grep -qE \\"^IMAGE_TAG=\\" .env; then sed -i \\"s/^IMAGE_TAG=.*/IMAGE_TAG=${imageTag}/\\" .env; else echo \\"IMAGE_TAG=${imageTag}\\" >> .env; fi",
                                             "docker-compose config | grep image",
                                             "docker-compose pull",
                                             "docker-compose up -d --remove-orphans",
                                             "curl -fsS http://localhost:5000/api/vehicle/health",
                                             "docker image prune -af --filter \\"until=168h\\""
-                                        ]' \
+                                        ]' \\
                                         --query "Command.CommandId" --output text
                                 """
                             ).trim()
@@ -91,19 +95,19 @@ pipeline {
                             echo "SSM CommandId: ${cmdId}"
 
                             sh """
-                                aws ssm wait command-executed \
-                                    --region "${env.AWS_DEFAULT_REGION}" \
-                                    --command-id "${cmdId}" \
-                                    --instance-id "${env.INSTANCE_ID}"
+                                aws ssm wait command-executed \\
+                                    --region "${region}" \\
+                                    --command-id "${cmdId}" \\
+                                    --instance-id "${instanceId}"
                             """
 
                             def status = sh(
                                 returnStdout: true,
                                 script: """
-                                    aws ssm get-command-invocation \
-                                        --region "${env.AWS_DEFAULT_REGION}" \
-                                        --command-id "${cmdId}" \
-                                        --instance-id "${env.INSTANCE_ID}" \
+                                    aws ssm get-command-invocation \\
+                                        --region "${region}" \\
+                                        --command-id "${cmdId}" \\
+                                        --instance-id "${instanceId}" \\
                                         --query "Status" --output text
                                 """
                             ).trim()
@@ -111,10 +115,10 @@ pipeline {
                             def out = sh(
                                 returnStdout: true, 
                                 script: """
-                                    aws ssm get-command-invocation \
-                                        --region "${env.AWS_DEFAULT_REGION}" \
-                                        --command-id "${cmdId}" \
-                                        --instance-id "${env.INSTANCE_ID}" \
+                                    aws ssm get-command-invocation \\
+                                        --region "${region}" \\
+                                        --command-id "${cmdId}" \\
+                                        --instance-id "${instanceId}" \\
                                         --query "StandardOutputContent" --output text
                                 """
                             ).trim()
@@ -122,10 +126,10 @@ pipeline {
                             def err = sh(
                                 returnStdout: true, 
                                 script: """
-                                    aws ssm get-command-invocation \
-                                        --region "${env.AWS_DEFAULT_REGION}" \
-                                        --command-id "${cmdId}" \
-                                        --instance-id "${env.INSTANCE_ID}" \
+                                    aws ssm get-command-invocation \\
+                                        --region "${region}" \\
+                                        --command-id "${cmdId}" \\
+                                        --instance-id "${instanceId}" \\
                                         --query "StandardErrorContent" --output text
                                 """
                             ).trim()
@@ -137,13 +141,16 @@ pipeline {
                         } catch (e) {
                             echo "Deploy failed, starting rollback... Reason: ${e}"
                             
+                            def region = env.AWS_DEFAULT_REGION
+                            def instanceId = env.INSTANCE_ID
+                            
                             def rbCmdId = sh(
                                 returnStdout: true,
                                 script: """
-                                    aws ssm send-command \
-                                        --region "${env.AWS_DEFAULT_REGION}" \
-                                        --document-name "AWS-RunShellScript" \
-                                        --instance-ids "${env.INSTANCE_ID}" \
+                                    aws ssm send-command \\
+                                        --region "${region}" \\
+                                        --document-name "AWS-RunShellScript" \\
+                                        --instance-ids "${instanceId}" \\
                                         --parameters 'commands=[
                                             "set -e",
                                             "cd /home/ubuntu/autonomous-vehicle",
@@ -157,7 +164,7 @@ pipeline {
                                             "docker-compose pull",
                                             "docker-compose up -d --remove-orphans",
                                             "curl -fsS http://localhost:5000/api/vehicle/health"
-                                            ]' \
+                                            ]' \\
                                         --query "Command.CommandId" --output text
                                     """
                                 ).trim()
@@ -165,19 +172,19 @@ pipeline {
                             echo "SSM CommandId (rollback): ${rbCmdId}"
 
                             sh """
-                                aws ssm wait command-executed \
-                                    --region "${env.AWS_DEFAULT_REGION}" \
-                                    --command-id "${rbCmdId}" \
-                                    --instance-id "${env.INSTANCE_ID}"
+                                aws ssm wait command-executed \\
+                                    --region "${region}" \\
+                                    --command-id "${rbCmdId}" \\
+                                    --instance-id "${instanceId}"
                             """
 
                             def rbStatus = sh(
                                 returnStdout: true, 
                                 script: """
-                                    aws ssm get-command-invocation \
-                                        --region "${env.AWS_DEFAULT_REGION}" \
-                                        --command-id "${rbCmdId}" \
-                                        --instance-id "${env.INSTANCE_ID}" \
+                                    aws ssm get-command-invocation \\
+                                        --region "${region}" \\
+                                        --command-id "${rbCmdId}" \\
+                                        --instance-id "${instanceId}" \\
                                         --query "Status" --output text
                                 """
                             ).trim()
@@ -185,10 +192,10 @@ pipeline {
                             def rbOut = sh(
                                 returnStdout: true, 
                                 script: """
-                                    aws ssm get-command-invocation \
-                                        --region "${env.AWS_DEFAULT_REGION}" \
-                                        --command-id "${rbCmdId}" \
-                                        --instance-id "${env.INSTANCE_ID}" \
+                                    aws ssm get-command-invocation \\
+                                        --region "${region}" \\
+                                        --command-id "${rbCmdId}" \\
+                                        --instance-id "${instanceId}" \\
                                         --query "StandardOutputContent" --output text
                                 """
                             ).trim()
@@ -196,10 +203,10 @@ pipeline {
                             def rbErr = sh(
                                 returnStdout: true, 
                                 script: """
-                                    aws ssm get-command-invocation \
-                                        --region "${env.AWS_DEFAULT_REGION}" \
-                                        --command-id "${rbCmdId}" \
-                                        --instance-id "${env.INSTANCE_ID}" \
+                                    aws ssm get-command-invocation \\
+                                        --region "${region}" \\
+                                        --command-id "${rbCmdId}" \\
+                                        --instance-id "${instanceId}" \\
                                         --query "StandardErrorContent" --output text
                                 """
                             ).trim()
