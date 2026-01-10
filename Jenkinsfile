@@ -84,39 +84,38 @@ pipeline {
                         
                         try {
                             // 使用 --cli-input-json 文件方式，避免 Groovy 字符串插值问题
+                            def deployCommands = [
+                                'set -e',
+                                'cd /home/ubuntu/autonomous-vehicle',
+                                'test -f .env || touch .env',
+                                'OLD_TAG=$(grep -E "^IMAGE_TAG=" .env | tail -n 1 | cut -d= -f2- || true)',
+                                'if [ -n "$OLD_TAG" ]; then if grep -qE "^PREV_IMAGE_TAG=" .env; then sed -i "s/^PREV_IMAGE_TAG=.*/PREV_IMAGE_TAG=$OLD_TAG/" .env; else echo "PREV_IMAGE_TAG=$OLD_TAG" >> .env; fi; fi',
+                                "if grep -qE \"^IMAGE_TAG=\" .env; then sed -i \"s/^IMAGE_TAG=.*/IMAGE_TAG=${env.DEPLOY_IMAGE_TAG}/\" .env; else echo \"IMAGE_TAG=${env.DEPLOY_IMAGE_TAG}\" >> .env; fi",
+                                'docker compose config | grep image',
+                                'docker compose pull',
+                                'docker compose up -d --remove-orphans',
+                                'curl -fsS http://localhost:5000/api/vehicle/health',
+                                'docker image prune -af --filter "until=168h"'
+                            ]
+
+                            def deployPayload = [
+                                DocumentName: 'AWS-RunShellScript',
+                                InstanceIds: [env.DEPLOY_INSTANCE_ID],
+                                Parameters: [commands: deployCommands]
+                            ]
+
+                            writeFile(
+                                file: '/tmp/ssm-deploy.json',
+                                text: groovy.json.JsonOutput.prettyPrint(
+                                    groovy.json.JsonOutput.toJson(deployPayload)
+                                )
+                            )
+
                             def cmdId = sh(
                                 returnStdout: true,
                                 script: '''
                                     set -e
 
-                                    # 生成 JSON 文件（使用单引号 heredoc 避免 shell 变量替换，然后手动替换）
-                                    cat > /tmp/ssm-deploy.json << 'DEPLOY_EOF'
-                                    {
-                                    "DocumentName": "AWS-RunShellScript",
-                                    "InstanceIds": ["INSTANCE_ID_PLACEHOLDER"],
-                                    "Parameters": {
-                                        "commands": [
-                                        "set -e",
-                                        "cd /home/ubuntu/autonomous-vehicle",
-                                        "test -f .env || touch .env",
-                                        "OLD_TAG=$(grep -E \\"^IMAGE_TAG=\\" .env | tail -n 1 | cut -d= -f2- || true)",
-                                        "if [ -n \\"$OLD_TAG\\" ]; then if grep -qE \\"^PREV_IMAGE_TAG=\\" .env; then sed -i \\"s/^PREV_IMAGE_TAG=.*/PREV_IMAGE_TAG=$OLD_TAG/\\" .env; else echo \\"PREV_IMAGE_TAG=$OLD_TAG\\" >> .env; fi; fi",
-                                        "if grep -qE \\"^IMAGE_TAG=\\" .env; then sed -i \\"s/^IMAGE_TAG=.*/IMAGE_TAG=IMAGE_TAG_PLACEHOLDER/\\" .env; else echo \\"IMAGE_TAG=IMAGE_TAG_PLACEHOLDER\\" >> .env; fi",
-                                        "docker compose config | grep image",
-                                        "docker compose pull",
-                                        "docker compose up -d --remove-orphans",
-                                        "curl -fsS http://localhost:5000/api/vehicle/health",
-                                        "docker image prune -af --filter \\"until=168h\\""
-                                        ]
-                                    }
-                                    }
-                                    DEPLOY_EOF
-
-                                    # 替换占位符
-                                    sed -i "s/INSTANCE_ID_PLACEHOLDER/$DEPLOY_INSTANCE_ID/g" /tmp/ssm-deploy.json
-                                    sed -i "s/IMAGE_TAG_PLACEHOLDER/$DEPLOY_IMAGE_TAG/g" /tmp/ssm-deploy.json
-
-                                    # 打印 JSON 文件内容
                                     echo "=== ssm-deploy.json ==="
                                     cat /tmp/ssm-deploy.json
                                     echo "======================="
@@ -192,34 +191,35 @@ pipeline {
                             echo "Deploy failed, starting rollback... Reason: ${e}"
                             
                             // 回滚也使用 --cli-input-json 方式
+                            def rollbackCommands = [
+                                'set -e',
+                                'cd /home/ubuntu/autonomous-vehicle',
+                                'test -f .env || (echo ".env missing" && exit 2)',
+                                'PREV=$(grep -E "^PREV_IMAGE_TAG=" .env | tail -n 1 | cut -d= -f2- || true)',
+                                'if [ -z "$PREV" ]; then echo "No PREV_IMAGE_TAG found, cannot rollback"; exit 3; fi',
+                                'if grep -qE "^IMAGE_TAG=" .env; then sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$PREV/" .env; else echo "IMAGE_TAG=$PREV" >> .env; fi',
+                                'docker compose pull',
+                                'docker compose up -d --remove-orphans',
+                                'curl -fsS http://localhost:5000/api/vehicle/health'
+                            ]
+
+                            def rollbackPayload = [
+                                DocumentName: 'AWS-RunShellScript',
+                                InstanceIds: [env.DEPLOY_INSTANCE_ID],
+                                Parameters: [commands: rollbackCommands]
+                            ]
+
+                            writeFile(
+                                file: '/tmp/ssm-rollback.json',
+                                text: groovy.json.JsonOutput.prettyPrint(
+                                    groovy.json.JsonOutput.toJson(rollbackPayload)
+                                )
+                            )
+
                             def rbCmdId = sh(
                                 returnStdout: true,
                                 script: '''
                                     set -e
-
-                                    # 生成回滚 JSON 文件（使用单引号 heredoc 避免 shell 变量替换）
-                                    cat > /tmp/ssm-rollback.json << 'ROLLBACK_EOF'
-                                    {
-                                    "DocumentName": "AWS-RunShellScript",
-                                    "InstanceIds": ["INSTANCE_ID_PLACEHOLDER"],
-                                    "Parameters": {
-                                        "commands": [
-                                        "set -e",
-                                        "cd /home/ubuntu/autonomous-vehicle",
-                                        "test -f .env || (echo \\".env missing\\" && exit 2)",
-                                        "PREV=$(grep -E \\"^PREV_IMAGE_TAG=\\" .env | tail -n 1 | cut -d= -f2- || true)",
-                                        "if [ -z \\"$PREV\\" ]; then echo \\"No PREV_IMAGE_TAG found, cannot rollback\\"; exit 3; fi",
-                                        "if grep -qE \\"^IMAGE_TAG=\\" .env; then sed -i \\"s/^IMAGE_TAG=.*/IMAGE_TAG=$PREV/\\" .env; else echo \\"IMAGE_TAG=$PREV\\" >> .env; fi",
-                                        "docker compose pull",
-                                        "docker compose up -d --remove-orphans",
-                                        "curl -fsS http://localhost:5000/api/vehicle/health"
-                                        ]
-                                    }
-                                    }
-                                    ROLLBACK_EOF
-
-                                    # 替换占位符
-                                    sed -i "s/INSTANCE_ID_PLACEHOLDER/$DEPLOY_INSTANCE_ID/g" /tmp/ssm-rollback.json
 
                                     # 打印 JSON 文件内容
                                     echo "=== ssm-rollback.json ==="
