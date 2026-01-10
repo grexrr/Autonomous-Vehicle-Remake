@@ -88,56 +88,56 @@ pipeline {
                                 returnStdout: true,
                                 script: '''
                                     set -e
-                                    
+
                                     # 生成 JSON 文件（使用单引号 heredoc 避免 shell 变量替换，然后手动替换）
                                     cat > /tmp/ssm-deploy.json << 'DEPLOY_EOF'
                                     {
-                                      "DocumentName": "AWS-RunShellScript",
-                                      "InstanceIds": ["INSTANCE_ID_PLACEHOLDER"],
-                                      "Parameters": {
+                                    "DocumentName": "AWS-RunShellScript",
+                                    "InstanceIds": ["INSTANCE_ID_PLACEHOLDER"],
+                                    "Parameters": {
                                         "commands": [
-                                          "set -e",
-                                          "cd /home/ubuntu/autonomous-vehicle",
-                                          "test -f .env || touch .env",
-                                          "OLD_TAG=$(grep -E \"^IMAGE_TAG=\" .env | tail -n 1 | cut -d= -f2- || true)",
-                                          "if [ -n \"$OLD_TAG\" ]; then if grep -qE \"^PREV_IMAGE_TAG=\" .env; then sed -i \"s/^PREV_IMAGE_TAG=.*/PREV_IMAGE_TAG=$OLD_TAG/\" .env; else echo \"PREV_IMAGE_TAG=$OLD_TAG\" >> .env; fi; fi",
-                                          "if grep -qE \"^IMAGE_TAG=\" .env; then sed -i \"s/^IMAGE_TAG=.*/IMAGE_TAG=IMAGE_TAG_PLACEHOLDER/\" .env; else echo \"IMAGE_TAG=IMAGE_TAG_PLACEHOLDER\" >> .env; fi",
-                                          "docker compose config | grep image",
-                                          "docker compose pull",
-                                          "docker compose up -d --remove-orphans",
-                                          "curl -fsS http://localhost:5000/api/vehicle/health",
-                                          "docker image prune -af --filter \"until=168h\""
+                                        "set -e",
+                                        "cd /home/ubuntu/autonomous-vehicle",
+                                        "test -f .env || touch .env",
+                                        "OLD_TAG=$(grep -E \\"^IMAGE_TAG=\\" .env | tail -n 1 | cut -d= -f2- || true)",
+                                        "if [ -n \\"$OLD_TAG\\" ]; then if grep -qE \\"^PREV_IMAGE_TAG=\\" .env; then sed -i \\"s/^PREV_IMAGE_TAG=.*/PREV_IMAGE_TAG=$OLD_TAG/\\" .env; else echo \\"PREV_IMAGE_TAG=$OLD_TAG\\" >> .env; fi; fi",
+                                        "if grep -qE \\"^IMAGE_TAG=\\" .env; then sed -i \\"s/^IMAGE_TAG=.*/IMAGE_TAG=IMAGE_TAG_PLACEHOLDER/\\" .env; else echo \\"IMAGE_TAG=IMAGE_TAG_PLACEHOLDER\\" >> .env; fi",
+                                        "docker compose config | grep image",
+                                        "docker compose pull",
+                                        "docker compose up -d --remove-orphans",
+                                        "curl -fsS http://localhost:5000/api/vehicle/health",
+                                        "docker image prune -af --filter \\"until=168h\\""
                                         ]
-                                      }
+                                    }
                                     }
                                     DEPLOY_EOF
-                                    
+
                                     # 替换占位符
                                     sed -i "s/INSTANCE_ID_PLACEHOLDER/$DEPLOY_INSTANCE_ID/g" /tmp/ssm-deploy.json
                                     sed -i "s/IMAGE_TAG_PLACEHOLDER/$DEPLOY_IMAGE_TAG/g" /tmp/ssm-deploy.json
-                                    
+
                                     # 打印 JSON 文件内容
                                     echo "=== ssm-deploy.json ==="
                                     cat /tmp/ssm-deploy.json
                                     echo "======================="
-                                    
+
                                     # 调用 AWS CLI 并捕获错误
                                     set +e
                                     CMD_ID=$(aws ssm send-command --region "$DEPLOY_REGION" --cli-input-json file:///tmp/ssm-deploy.json --query 'Command.CommandId' --output text 2>&1)
                                     RC=$?
                                     set -e
-                                    
+
                                     echo "send-command raw output: $CMD_ID"
                                     [ $RC -eq 0 ] || exit $RC
-                                    
+
                                     # 确保看起来像 UUID
                                     echo "$CMD_ID" | grep -Eq '^[0-9a-f-]{36}$' || (echo "Invalid CommandId format: $CMD_ID" && exit 1)
-                                    
+
                                     echo "$CMD_ID"
-                                    
+
                                     # 清理临时文件
                                     rm -f /tmp/ssm-deploy.json
-                                '''
+                                '''.stripIndent()
                             ).trim()
 
                             echo "SSM CommandId: ${cmdId}"
@@ -196,53 +196,53 @@ pipeline {
                                 returnStdout: true,
                                 script: '''
                                     set -e
-                                    
+
                                     # 生成回滚 JSON 文件（使用单引号 heredoc 避免 shell 变量替换）
                                     cat > /tmp/ssm-rollback.json << 'ROLLBACK_EOF'
                                     {
-                                      "DocumentName": "AWS-RunShellScript",
-                                      "InstanceIds": ["INSTANCE_ID_PLACEHOLDER"],
-                                      "Parameters": {
+                                    "DocumentName": "AWS-RunShellScript",
+                                    "InstanceIds": ["INSTANCE_ID_PLACEHOLDER"],
+                                    "Parameters": {
                                         "commands": [
-                                          "set -e",
-                                          "cd /home/ubuntu/autonomous-vehicle",
-                                          "test -f .env || (echo \".env missing\" && exit 2)",
-                                          "PREV=$(grep -E \"^PREV_IMAGE_TAG=\" .env | tail -n 1 | cut -d= -f2- || true)",
-                                          "if [ -z \"$PREV\" ]; then echo \"No PREV_IMAGE_TAG found, cannot rollback\"; exit 3; fi",
-                                          "if grep -qE \"^IMAGE_TAG=\" .env; then sed -i \"s/^IMAGE_TAG=.*/IMAGE_TAG=$PREV/\" .env; else echo \"IMAGE_TAG=$PREV\" >> .env; fi",
-                                          "docker compose pull",
-                                          "docker compose up -d --remove-orphans",
-                                          "curl -fsS http://localhost:5000/api/vehicle/health"
+                                        "set -e",
+                                        "cd /home/ubuntu/autonomous-vehicle",
+                                        "test -f .env || (echo \\".env missing\\" && exit 2)",
+                                        "PREV=$(grep -E \\"^PREV_IMAGE_TAG=\\" .env | tail -n 1 | cut -d= -f2- || true)",
+                                        "if [ -z \\"$PREV\\" ]; then echo \\"No PREV_IMAGE_TAG found, cannot rollback\\"; exit 3; fi",
+                                        "if grep -qE \\"^IMAGE_TAG=\\" .env; then sed -i \\"s/^IMAGE_TAG=.*/IMAGE_TAG=$PREV/\\" .env; else echo \\"IMAGE_TAG=$PREV\\" >> .env; fi",
+                                        "docker compose pull",
+                                        "docker compose up -d --remove-orphans",
+                                        "curl -fsS http://localhost:5000/api/vehicle/health"
                                         ]
-                                      }
+                                    }
                                     }
                                     ROLLBACK_EOF
-                                    
+
                                     # 替换占位符
                                     sed -i "s/INSTANCE_ID_PLACEHOLDER/$DEPLOY_INSTANCE_ID/g" /tmp/ssm-rollback.json
-                                    
+
                                     # 打印 JSON 文件内容
                                     echo "=== ssm-rollback.json ==="
                                     cat /tmp/ssm-rollback.json
                                     echo "======================="
-                                    
+
                                     # 调用 AWS CLI 并捕获错误
                                     set +e
                                     CMD_ID=$(aws ssm send-command --region "$DEPLOY_REGION" --cli-input-json file:///tmp/ssm-rollback.json --query 'Command.CommandId' --output text 2>&1)
                                     RC=$?
                                     set -e
-                                    
+
                                     echo "send-command raw output: $CMD_ID"
                                     [ $RC -eq 0 ] || exit $RC
-                                    
+
                                     # 确保看起来像 UUID
                                     echo "$CMD_ID" | grep -Eq '^[0-9a-f-]{36}$' || (echo "Invalid CommandId format: $CMD_ID" && exit 1)
-                                    
+
                                     echo "$CMD_ID"
-                                    
+
                                     # 清理临时文件
                                     rm -f /tmp/ssm-rollback.json
-                                '''
+                                '''.stripIndent()
                             ).trim()
 
                             echo "SSM CommandId (rollback): ${rbCmdId}"
