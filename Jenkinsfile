@@ -111,33 +111,27 @@ pipeline {
                                 )
                             )
 
+                            sh '''
+                                set -e
+                                echo "=== ssm-deploy.json ==="
+                                cat /tmp/ssm-deploy.json
+                                echo "======================="
+                            '''.stripIndent()
+
                             def cmdId = sh(
                                 returnStdout: true,
                                 script: '''
                                     set -e
-
-                                    echo "=== ssm-deploy.json ==="
-                                    cat /tmp/ssm-deploy.json
-                                    echo "======================="
-
-                                    # 调用 AWS CLI 并捕获错误
-                                    set +e
-                                    CMD_ID=$(aws ssm send-command --region "$DEPLOY_REGION" --cli-input-json file:///tmp/ssm-deploy.json --query 'Command.CommandId' --output text 2>&1)
-                                    RC=$?
-                                    set -e
-
-                                    echo "send-command raw output: $CMD_ID"
-                                    [ $RC -eq 0 ] || exit $RC
-
-                                    # 确保看起来像 UUID
-                                    echo "$CMD_ID" | grep -Eq '^[0-9a-f-]{36}$' || (echo "Invalid CommandId format: $CMD_ID" && exit 1)
-
-                                    echo "$CMD_ID"
-
-                                    # 清理临时文件
-                                    rm -f /tmp/ssm-deploy.json
+                                    CMD_ID=$(aws ssm send-command --region "$DEPLOY_REGION" --cli-input-json file:///tmp/ssm-deploy.json --query 'Command.CommandId' --output text)
+                                    echo "$CMD_ID" | grep -Eq '^[0-9a-f-]{36}$' || (echo "Invalid CommandId format: $CMD_ID" >&2 && exit 1)
+                                    printf '%s' "$CMD_ID"
                                 '''.stripIndent()
                             ).trim()
+
+                            sh '''
+                                set -e
+                                rm -f /tmp/ssm-deploy.json
+                            '''.stripIndent()
 
                             echo "SSM CommandId: ${cmdId}"
                             
@@ -216,34 +210,27 @@ pipeline {
                                 )
                             )
 
+                            sh '''
+                                set -e
+                                echo "=== ssm-rollback.json ==="
+                                cat /tmp/ssm-rollback.json
+                                echo "======================="
+                            '''.stripIndent()
+
                             def rbCmdId = sh(
                                 returnStdout: true,
                                 script: '''
                                     set -e
-
-                                    # 打印 JSON 文件内容
-                                    echo "=== ssm-rollback.json ==="
-                                    cat /tmp/ssm-rollback.json
-                                    echo "======================="
-
-                                    # 调用 AWS CLI 并捕获错误
-                                    set +e
-                                    CMD_ID=$(aws ssm send-command --region "$DEPLOY_REGION" --cli-input-json file:///tmp/ssm-rollback.json --query 'Command.CommandId' --output text 2>&1)
-                                    RC=$?
-                                    set -e
-
-                                    echo "send-command raw output: $CMD_ID"
-                                    [ $RC -eq 0 ] || exit $RC
-
-                                    # 确保看起来像 UUID
-                                    echo "$CMD_ID" | grep -Eq '^[0-9a-f-]{36}$' || (echo "Invalid CommandId format: $CMD_ID" && exit 1)
-
-                                    echo "$CMD_ID"
-
-                                    # 清理临时文件
-                                    rm -f /tmp/ssm-rollback.json
+                                    CMD_ID=$(aws ssm send-command --region "$DEPLOY_REGION" --cli-input-json file:///tmp/ssm-rollback.json --query 'Command.CommandId' --output text)
+                                    echo "$CMD_ID" | grep -Eq '^[0-9a-f-]{36}$' || (echo "Invalid CommandId format: $CMD_ID" >&2 && exit 1)
+                                    printf '%s' "$CMD_ID"
                                 '''.stripIndent()
                             ).trim()
+
+                            sh '''
+                                set -e
+                                rm -f /tmp/ssm-rollback.json
+                            '''.stripIndent()
 
                             echo "SSM CommandId (rollback): ${rbCmdId}"
                             
