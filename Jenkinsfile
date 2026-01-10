@@ -15,6 +15,7 @@ pipeline {
                 checkout scm
                 sh 'ls -la'
                 sh 'test -f Dockerfile'
+                sh 'echo "Successful!"'
             }
         }
 
