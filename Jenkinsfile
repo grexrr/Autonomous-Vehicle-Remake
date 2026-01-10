@@ -137,12 +137,18 @@ pipeline {
                             
                             env.DEPLOY_CMD_ID = cmdId
 
-                            sh '''
-                                aws ssm wait command-executed \
-                                    --region "$DEPLOY_REGION" \
-                                    --command-id "$DEPLOY_CMD_ID" \
-                                    --instance-id "$DEPLOY_INSTANCE_ID"
-                            '''
+                            def waitRc = sh(
+                                returnStatus: true,
+                                script: '''
+                                    aws ssm wait command-executed \
+                                        --region "$DEPLOY_REGION" \
+                                        --command-id "$DEPLOY_CMD_ID" \
+                                        --instance-id "$DEPLOY_INSTANCE_ID"
+                                '''.stripIndent()
+                            )
+                            if (waitRc != 0) {
+                                echo "SSM wait failed with rc=${waitRc}, fetching invocation output..."
+                            }
 
                             def status = sh(
                                 returnStdout: true,
@@ -236,12 +242,18 @@ pipeline {
                             
                             env.ROLLBACK_CMD_ID = rbCmdId
 
-                            sh '''
-                                aws ssm wait command-executed \
-                                    --region "$DEPLOY_REGION" \
-                                    --command-id "$ROLLBACK_CMD_ID" \
-                                    --instance-id "$DEPLOY_INSTANCE_ID"
-                            '''
+                            def rbWaitRc = sh(
+                                returnStatus: true,
+                                script: '''
+                                    aws ssm wait command-executed \
+                                        --region "$DEPLOY_REGION" \
+                                        --command-id "$ROLLBACK_CMD_ID" \
+                                        --instance-id "$DEPLOY_INSTANCE_ID"
+                                '''.stripIndent()
+                            )
+                            if (rbWaitRc != 0) {
+                                echo "SSM wait failed (rollback) rc=${rbWaitRc}, fetching invocation output..."
+                            }
 
                             def rbStatus = sh(
                                 returnStdout: true, 
