@@ -43,14 +43,28 @@ pipeline {
 
                         echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USER" --password-stdin
 
-                        docker buildx create --use --name jxbuilder || docker buildx use jxbuilder
-
-                        docker buildx inspect --bootstrap
+                        docker buildx inspect jxbuilder >/dev/null 2>&1 || docker buildx create --use --name jxbuilder
+                        docker buildx use jxbuilder
 
                         docker buildx build \
                         --platform linux/arm64 \
                         -t "${IMAGE_REPO}:${IMAGE_TAG}" \
                         --push .
+                    '''
+                }
+            }
+        }
+
+        stage('AWS Identity (sanity)') {
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: "${env.AWS_CRED_ID}"
+                ]]) {
+                    sh '''
+                        set -e
+                        aws --version
+                        aws sts get-caller-identity --region "$AWS_DEFAULT_REGION"
                     '''
                 }
             }
@@ -102,11 +116,24 @@ pipeline {
                                     sed -i "s/INSTANCE_ID_PLACEHOLDER/$DEPLOY_INSTANCE_ID/g" /tmp/ssm-deploy.json
                                     sed -i "s/IMAGE_TAG_PLACEHOLDER/$DEPLOY_IMAGE_TAG/g" /tmp/ssm-deploy.json
                                     
-                                    # 调用 AWS CLI
-                                    aws ssm send-command \
-                                        --region "$DEPLOY_REGION" \
-                                        --cli-input-json file:///tmp/ssm-deploy.json \
-                                        --query "Command.CommandId" --output text
+                                    # 打印 JSON 文件内容
+                                    echo "=== ssm-deploy.json ==="
+                                    cat /tmp/ssm-deploy.json
+                                    echo "======================="
+                                    
+                                    # 调用 AWS CLI 并捕获错误
+                                    set +e
+                                    CMD_ID=$(aws ssm send-command --region "$DEPLOY_REGION" --cli-input-json file:///tmp/ssm-deploy.json --query 'Command.CommandId' --output text 2>&1)
+                                    RC=$?
+                                    set -e
+                                    
+                                    echo "send-command raw output: $CMD_ID"
+                                    [ $RC -eq 0 ] || exit $RC
+                                    
+                                    # 确保看起来像 UUID
+                                    echo "$CMD_ID" | grep -Eq '^[0-9a-f-]{36}$' || (echo "Invalid CommandId format: $CMD_ID" && exit 1)
+                                    
+                                    echo "$CMD_ID"
                                     
                                     # 清理临时文件
                                     rm -f /tmp/ssm-deploy.json
@@ -194,11 +221,24 @@ pipeline {
                                     # 替换占位符
                                     sed -i "s/INSTANCE_ID_PLACEHOLDER/$DEPLOY_INSTANCE_ID/g" /tmp/ssm-rollback.json
                                     
-                                    # 调用 AWS CLI
-                                    aws ssm send-command \
-                                        --region "$DEPLOY_REGION" \
-                                        --cli-input-json file:///tmp/ssm-rollback.json \
-                                        --query "Command.CommandId" --output text
+                                    # 打印 JSON 文件内容
+                                    echo "=== ssm-rollback.json ==="
+                                    cat /tmp/ssm-rollback.json
+                                    echo "======================="
+                                    
+                                    # 调用 AWS CLI 并捕获错误
+                                    set +e
+                                    CMD_ID=$(aws ssm send-command --region "$DEPLOY_REGION" --cli-input-json file:///tmp/ssm-rollback.json --query 'Command.CommandId' --output text 2>&1)
+                                    RC=$?
+                                    set -e
+                                    
+                                    echo "send-command raw output: $CMD_ID"
+                                    [ $RC -eq 0 ] || exit $RC
+                                    
+                                    # 确保看起来像 UUID
+                                    echo "$CMD_ID" | grep -Eq '^[0-9a-f-]{36}$' || (echo "Invalid CommandId format: $CMD_ID" && exit 1)
+                                    
+                                    echo "$CMD_ID"
                                     
                                     # 清理临时文件
                                     rm -f /tmp/ssm-rollback.json
