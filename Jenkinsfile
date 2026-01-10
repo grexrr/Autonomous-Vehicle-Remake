@@ -72,9 +72,9 @@ pipeline {
                                 returnStdout: true,
                                 script: """
                                     aws ssm send-command \\
-                                        --region "${region}" \\
+                                        --region ${region} \\
                                         --document-name "AWS-RunShellScript" \\
-                                        --instance-ids "${instanceId}" \\
+                                        --instance-ids ${instanceId} \\
                                         --parameters 'commands=[
                                             "set -e",
                                             "cd /home/ubuntu/autonomous-vehicle",
@@ -96,18 +96,18 @@ pipeline {
 
                             sh """
                                 aws ssm wait command-executed \\
-                                    --region "${region}" \\
-                                    --command-id "${cmdId}" \\
-                                    --instance-id "${instanceId}"
+                                    --region ${region} \\
+                                    --command-id ${cmdId} \\
+                                    --instance-id ${instanceId}
                             """
 
                             def status = sh(
                                 returnStdout: true,
                                 script: """
                                     aws ssm get-command-invocation \\
-                                        --region "${region}" \\
-                                        --command-id "${cmdId}" \\
-                                        --instance-id "${instanceId}" \\
+                                        --region ${region} \\
+                                        --command-id ${cmdId} \\
+                                        --instance-id ${instanceId} \\
                                         --query "Status" --output text
                                 """
                             ).trim()
@@ -116,9 +116,9 @@ pipeline {
                                 returnStdout: true, 
                                 script: """
                                     aws ssm get-command-invocation \\
-                                        --region "${region}" \\
-                                        --command-id "${cmdId}" \\
-                                        --instance-id "${instanceId}" \\
+                                        --region ${region} \\
+                                        --command-id ${cmdId} \\
+                                        --instance-id ${instanceId} \\
                                         --query "StandardOutputContent" --output text
                                 """
                             ).trim()
@@ -127,9 +127,9 @@ pipeline {
                                 returnStdout: true, 
                                 script: """
                                     aws ssm get-command-invocation \\
-                                        --region "${region}" \\
-                                        --command-id "${cmdId}" \\
-                                        --instance-id "${instanceId}" \\
+                                        --region ${region} \\
+                                        --command-id ${cmdId} \\
+                                        --instance-id ${instanceId} \\
                                         --query "StandardErrorContent" --output text
                                 """
                             ).trim()
@@ -148,9 +148,9 @@ pipeline {
                                 returnStdout: true,
                                 script: """
                                     aws ssm send-command \\
-                                        --region "${region}" \\
+                                        --region ${region} \\
                                         --document-name "AWS-RunShellScript" \\
-                                        --instance-ids "${instanceId}" \\
+                                        --instance-ids ${instanceId} \\
                                         --parameters 'commands=[
                                             "set -e",
                                             "cd /home/ubuntu/autonomous-vehicle",
@@ -173,18 +173,18 @@ pipeline {
 
                             sh """
                                 aws ssm wait command-executed \\
-                                    --region "${region}" \\
-                                    --command-id "${rbCmdId}" \\
-                                    --instance-id "${instanceId}"
+                                    --region ${region} \\
+                                    --command-id ${rbCmdId} \\
+                                    --instance-id ${instanceId}
                             """
 
                             def rbStatus = sh(
                                 returnStdout: true, 
                                 script: """
                                     aws ssm get-command-invocation \\
-                                        --region "${region}" \\
-                                        --command-id "${rbCmdId}" \\
-                                        --instance-id "${instanceId}" \\
+                                        --region ${region} \\
+                                        --command-id ${rbCmdId} \\
+                                        --instance-id ${instanceId} \\
                                         --query "Status" --output text
                                 """
                             ).trim()
@@ -193,9 +193,9 @@ pipeline {
                                 returnStdout: true, 
                                 script: """
                                     aws ssm get-command-invocation \\
-                                        --region "${region}" \\
-                                        --command-id "${rbCmdId}" \\
-                                        --instance-id "${instanceId}" \\
+                                        --region ${region} \\
+                                        --command-id ${rbCmdId} \\
+                                        --instance-id ${instanceId} \\
                                         --query "StandardOutputContent" --output text
                                 """
                             ).trim()
@@ -204,9 +204,9 @@ pipeline {
                                 returnStdout: true, 
                                 script: """
                                     aws ssm get-command-invocation \\
-                                        --region "${region}" \\
-                                        --command-id "${rbCmdId}" \\
-                                        --instance-id "${instanceId}" \\
+                                        --region ${region} \\
+                                        --command-id ${rbCmdId} \\
+                                        --instance-id ${instanceId} \\
                                         --query "StandardErrorContent" --output text
                                 """
                             ).trim()
