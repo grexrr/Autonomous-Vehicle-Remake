@@ -94,7 +94,8 @@ pipeline {
                                 'docker compose config | grep image',
                                 'docker compose pull',
                                 'docker compose up -d --remove-orphans',
-                                'curl -fsS http://localhost:5000/api/vehicle/health',
+                                'sleep 3',
+                                'HEALTH_OK=0; for i in $(seq 1 15); do if curl -fsS http://localhost:5000/api/vehicle/health; then HEALTH_OK=1; break; fi; echo "health check retry $i"; sleep 2; done; if [ $HEALTH_OK -ne 1 ]; then echo "health check failed, dumping logs"; docker compose logs --no-color --tail 200 api || true; exit 1; fi',
                                 'docker image prune -af --filter "until=168h"'
                             ]
 
@@ -200,7 +201,8 @@ pipeline {
                                 'if grep -qE "^IMAGE_TAG=" .env; then sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$PREV/" .env; else echo "IMAGE_TAG=$PREV" >> .env; fi',
                                 'docker compose pull',
                                 'docker compose up -d --remove-orphans',
-                                'curl -fsS http://localhost:5000/api/vehicle/health'
+                                'sleep 3',
+                                'HEALTH_OK=0; for i in $(seq 1 15); do if curl -fsS http://localhost:5000/api/vehicle/health; then HEALTH_OK=1; break; fi; echo "health check retry $i"; sleep 2; done; if [ $HEALTH_OK -ne 1 ]; then echo "health check failed, dumping logs"; docker compose logs --no-color --tail 200 api || true; exit 1; fi'
                             ]
 
                             def rollbackPayload = [
