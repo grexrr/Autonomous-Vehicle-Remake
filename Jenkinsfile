@@ -43,7 +43,7 @@ pipeline {
 
                         echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USER" --password-stdin
 
-                        docker buildx use jxbuilder 2>/dev/null || docker buildx create --use --name jxbuilder
+                        docker buildx create --use --name jxbuilder || docker buildx use jxbuilder
 
                         docker buildx inspect --bootstrap
 
@@ -68,17 +68,19 @@ pipeline {
                                 returnStdout: true,
                                 script: """
                                     aws ssm send-command \
-                                        --region "${AWS_DEFAULT_REGION}" \
+                                        --region "${env.AWS_DEFAULT_REGION}" \
                                         --document-name "AWS-RunShellScript" \
-                                        --instance-ids "${INSTANCE_ID}" \
+                                        --instance-ids "${env.INSTANCE_ID}" \
                                         --parameters 'commands=[
                                             "set -e",
                                             "cd /home/ubuntu/autonomous-vehicle",
+                                            "test -f .env || touch .env",
                                             "OLD_TAG=\\$(grep -E \\"^IMAGE_TAG=\\" .env | tail -n 1 | cut -d= -f2- || true)",
                                             "if [ -n \\"\\$OLD_TAG\\" ]; then if grep -qE \\"^PREV_IMAGE_TAG=\\" .env; then sed -i \\"s/^PREV_IMAGE_TAG=.*/PREV_IMAGE_TAG=\\$OLD_TAG/\\" .env; else echo \\"PREV_IMAGE_TAG=\\$OLD_TAG\\" >> .env; fi; fi",
-                                            "if grep -qE \\"^IMAGE_TAG=\\" .env; then sed -i \\"s/^IMAGE_TAG=.*/IMAGE_TAG=${IMAGE_TAG}/\\" .env; else echo \\"IMAGE_TAG=${IMAGE_TAG}\\" >> .env; fi",
-                                            "docker compose pull",
-                                            "docker compose up -d --remove-orphans",
+                                            "if grep -qE \\"^IMAGE_TAG=\\" .env; then sed -i \\"s/^IMAGE_TAG=.*/IMAGE_TAG=${env.IMAGE_TAG}/\\" .env; else echo \\"IMAGE_TAG=${env.IMAGE_TAG}\\" >> .env; fi",
+                                            "docker-compose config | grep image",
+                                            "docker-compose pull",
+                                            "docker-compose up -d --remove-orphans",
                                             "curl -fsS http://localhost:5000/api/vehicle/health",
                                             "docker image prune -af --filter \\"until=168h\\""
                                         ]' \
@@ -90,18 +92,18 @@ pipeline {
 
                             sh """
                                 aws ssm wait command-executed \
-                                    --region "${AWS_DEFAULT_REGION}" \
+                                    --region "${env.AWS_DEFAULT_REGION}" \
                                     --command-id "${cmdId}" \
-                                    --instance-id "${INSTANCE_ID}"
+                                    --instance-id "${env.INSTANCE_ID}"
                             """
 
                             def status = sh(
                                 returnStdout: true,
                                 script: """
                                     aws ssm get-command-invocation \
-                                        --region "${AWS_DEFAULT_REGION}" \
+                                        --region "${env.AWS_DEFAULT_REGION}" \
                                         --command-id "${cmdId}" \
-                                        --instance-id "${INSTANCE_ID}" \
+                                        --instance-id "${env.INSTANCE_ID}" \
                                         --query "Status" --output text
                                 """
                             ).trim()
@@ -110,9 +112,9 @@ pipeline {
                                 returnStdout: true, 
                                 script: """
                                     aws ssm get-command-invocation \
-                                        --region "${AWS_DEFAULT_REGION}" \
+                                        --region "${env.AWS_DEFAULT_REGION}" \
                                         --command-id "${cmdId}" \
-                                        --instance-id "${INSTANCE_ID}" \
+                                        --instance-id "${env.INSTANCE_ID}" \
                                         --query "StandardOutputContent" --output text
                                 """
                             ).trim()
@@ -121,16 +123,16 @@ pipeline {
                                 returnStdout: true, 
                                 script: """
                                     aws ssm get-command-invocation \
-                                        --region "${AWS_DEFAULT_REGION}" \
+                                        --region "${env.AWS_DEFAULT_REGION}" \
                                         --command-id "${cmdId}" \
-                                        --instance-id "${INSTANCE_ID}" \
+                                        --instance-id "${env.INSTANCE_ID}" \
                                         --query "StandardErrorContent" --output text
                                 """
                             ).trim()
 
                             echo "SSM Status: ${status}"
                             echo "STDOUT:\\n${out}"
-                            if (err) echo "STDERR:\\n${err}"
+                            if (err && err != 'None') echo "STDERR:\\n${err}"
                             if (status != 'Success') error("Deploy failed: ${status}")
                         } catch (e) {
                             echo "Deploy failed, starting rollback... Reason: ${e}"
@@ -139,21 +141,21 @@ pipeline {
                                 returnStdout: true,
                                 script: """
                                     aws ssm send-command \
-                                        --region "${AWS_DEFAULT_REGION}" \
+                                        --region "${env.AWS_DEFAULT_REGION}" \
                                         --document-name "AWS-RunShellScript" \
-                                        --instance-ids "${INSTANCE_ID}" \
+                                        --instance-ids "${env.INSTANCE_ID}" \
                                         --parameters 'commands=[
                                             "set -e",
                                             "cd /home/ubuntu/autonomous-vehicle",
-                                            "test -f .env || (echo \\\\\\".env missing\\\\\\" && exit 2)",
+                                            "test -f .env || (echo \\".env missing\\" && exit 2)",
 
-                                            "PREV=\\\\$(grep -E \\\\\\"^PREV_IMAGE_TAG=\\\\\\" .env | tail -n 1 | cut -d= -f2- || true)",
-                                            "if [ -z \\\\\\"\\\\$PREV\\\\\\" ]; then echo \\\\\\"No PREV_IMAGE_TAG found, cannot rollback\\\\\\"; exit 3; fi",
+                                            "PREV=\\$(grep -E \\"^PREV_IMAGE_TAG=\\" .env | tail -n 1 | cut -d= -f2- || true)",
+                                            "if [ -z \\"\\$PREV\\" ]; then echo \\"No PREV_IMAGE_TAG found, cannot rollback\\"; exit 3; fi",
 
-                                            "if grep -qE \\\\\\"^IMAGE_TAG=\\\\\\" .env; then sed -i \\\\\\"s/^IMAGE_TAG=.*/IMAGE_TAG=\\\\$PREV/\\\\\\" .env; else echo \\\\\\"IMAGE_TAG=\\\\$PREV\\\\\\" >> .env; fi",
+                                            "if grep -qE \\"^IMAGE_TAG=\\" .env; then sed -i \\"s/^IMAGE_TAG=.*/IMAGE_TAG=\\$PREV/\\" .env; else echo \\"IMAGE_TAG=\\$PREV\\" >> .env; fi",
 
-                                            "docker compose pull",
-                                            "docker compose up -d --remove-orphans",
+                                            "docker-compose pull",
+                                            "docker-compose up -d --remove-orphans",
                                             "curl -fsS http://localhost:5000/api/vehicle/health"
                                             ]' \
                                         --query "Command.CommandId" --output text
@@ -164,18 +166,18 @@ pipeline {
 
                             sh """
                                 aws ssm wait command-executed \
-                                    --region "${AWS_DEFAULT_REGION}" \
+                                    --region "${env.AWS_DEFAULT_REGION}" \
                                     --command-id "${rbCmdId}" \
-                                    --instance-id "${INSTANCE_ID}"
+                                    --instance-id "${env.INSTANCE_ID}"
                             """
 
                             def rbStatus = sh(
                                 returnStdout: true, 
                                 script: """
                                     aws ssm get-command-invocation \
-                                        --region "${AWS_DEFAULT_REGION}" \
+                                        --region "${env.AWS_DEFAULT_REGION}" \
                                         --command-id "${rbCmdId}" \
-                                        --instance-id "${INSTANCE_ID}" \
+                                        --instance-id "${env.INSTANCE_ID}" \
                                         --query "Status" --output text
                                 """
                             ).trim()
@@ -184,9 +186,9 @@ pipeline {
                                 returnStdout: true, 
                                 script: """
                                     aws ssm get-command-invocation \
-                                        --region "${AWS_DEFAULT_REGION}" \
+                                        --region "${env.AWS_DEFAULT_REGION}" \
                                         --command-id "${rbCmdId}" \
-                                        --instance-id "${INSTANCE_ID}" \
+                                        --instance-id "${env.INSTANCE_ID}" \
                                         --query "StandardOutputContent" --output text
                                 """
                             ).trim()
@@ -195,21 +197,20 @@ pipeline {
                                 returnStdout: true, 
                                 script: """
                                     aws ssm get-command-invocation \
-                                        --region "${AWS_DEFAULT_REGION}" \
+                                        --region "${env.AWS_DEFAULT_REGION}" \
                                         --command-id "${rbCmdId}" \
-                                        --instance-id "${INSTANCE_ID}" \
+                                        --instance-id "${env.INSTANCE_ID}" \
                                         --query "StandardErrorContent" --output text
                                 """
                             ).trim()
 
                             echo "SSM Status (rollback): ${rbStatus}"
                             echo "STDOUT (rollback):\n${rbOut}"
-                            if (rbErr) echo "STDERR (rollback):\n${rbErr}"
-
+    
+                            if (rbErr && rbErr != 'None') echo "STDERR (rollback):\n${rbErr}"
                             if (rbStatus != 'Success') {
                                 error("Deploy failed AND rollback failed: ${rbStatus}")
                             }
-                            
                             error("Deploy failed, rollback succeeded. Build marked as FAILED on purpose.")
                         }
                     }
