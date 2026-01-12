@@ -77,11 +77,6 @@ pipeline {
                     credentialsId: "${env.AWS_CRED_ID}"
                 ]]){
                     script {
-                        // 设置环境变量，供 shell 脚本使用
-                        env.DEPLOY_REGION = env.AWS_DEFAULT_REGION
-                        env.DEPLOY_INSTANCE_ID = env.INSTANCE_ID
-                        env.DEPLOY_IMAGE_TAG = env.IMAGE_TAG
-                        
                         try {
                             // 使用 --cli-input-json 文件方式，避免 Groovy 字符串插值问题
                             def deployCommands = [
@@ -90,7 +85,7 @@ pipeline {
                                 'test -f .env || touch .env',
                                 'OLD_TAG=$(grep -E "^IMAGE_TAG=" .env | tail -n 1 | cut -d= -f2- || true)',
                                 'if [ -n "$OLD_TAG" ]; then if grep -qE "^PREV_IMAGE_TAG=" .env; then sed -i "s/^PREV_IMAGE_TAG=.*/PREV_IMAGE_TAG=$OLD_TAG/" .env; else echo "PREV_IMAGE_TAG=$OLD_TAG" >> .env; fi; fi',
-                                "if grep -qE \"^IMAGE_TAG=\" .env; then sed -i \"s/^IMAGE_TAG=.*/IMAGE_TAG=${env.DEPLOY_IMAGE_TAG}/\" .env; else echo \"IMAGE_TAG=${env.DEPLOY_IMAGE_TAG}\" >> .env; fi",
+                                "if grep -qE \"^IMAGE_TAG=\" .env; then sed -i \"s/^IMAGE_TAG=.*/IMAGE_TAG=${env.IMAGE_TAG}/\" .env; else echo \"IMAGE_TAG=${env.IMAGE_TAG}\" >> .env; fi",
                                 'docker compose config | grep image',
                                 'docker compose pull',
                                 'docker compose up -d --remove-orphans',
@@ -101,7 +96,7 @@ pipeline {
 
                             def deployPayload = [
                                 DocumentName: 'AWS-RunShellScript',
-                                InstanceIds: [env.DEPLOY_INSTANCE_ID],
+                                InstanceIds: [env.INSTANCE_ID],
                                 Parameters: [commands: deployCommands]
                             ]
 
@@ -119,11 +114,11 @@ pipeline {
                                 echo "======================="
                             '''.stripIndent()
 
-                            def cmdId = sh(
+                            def deployCmdId = sh(
                                 returnStdout: true,
                                 script: '''
                                     set -e
-                                    CMD_ID=$(aws ssm send-command --region "$DEPLOY_REGION" --cli-input-json file:///tmp/ssm-deploy.json --query 'Command.CommandId' --output text)
+                                    CMD_ID=$(aws ssm send-command --region "$AWS_DEFAULT_REGION" --cli-input-json file:///tmp/ssm-deploy.json --query 'Command.CommandId' --output text)
                                     echo "$CMD_ID" | grep -Eq '^[0-9a-f-]{36}$' || (echo "Invalid CommandId format: $CMD_ID" >&2 && exit 1)
                                     printf '%s' "$CMD_ID"
                                 '''.stripIndent()
@@ -134,17 +129,15 @@ pipeline {
                                 rm -f /tmp/ssm-deploy.json
                             '''.stripIndent()
 
-                            echo "SSM CommandId: ${cmdId}"
+                            echo "SSM CommandId: ${deployCmdId}"
                             
-                            env.DEPLOY_CMD_ID = cmdId
-
                             def waitRc = sh(
                                 returnStatus: true,
                                 script: '''
                                     aws ssm wait command-executed \
-                                        --region "$DEPLOY_REGION" \
-                                        --command-id "$DEPLOY_CMD_ID" \
-                                        --instance-id "$DEPLOY_INSTANCE_ID"
+                                        --region "$AWS_DEFAULT_REGION" \
+                                        --command-id "$deployCmdId" \
+                                        --instance-id "$INSTANCE_ID"
                                 '''.stripIndent()
                             )
                             if (waitRc != 0) {
@@ -155,9 +148,9 @@ pipeline {
                                 returnStdout: true,
                                 script: '''
                                     aws ssm get-command-invocation \
-                                        --region "$DEPLOY_REGION" \
-                                        --command-id "$DEPLOY_CMD_ID" \
-                                        --instance-id "$DEPLOY_INSTANCE_ID" \
+                                        --region "$AWS_DEFAULT_REGION" \
+                                        --command-id "$deployCmdId" \
+                                        --instance-id "$INSTANCE_ID" \
                                         --query "Status" --output text
                                 '''
                             ).trim()
@@ -166,9 +159,9 @@ pipeline {
                                 returnStdout: true, 
                                 script: '''
                                     aws ssm get-command-invocation \
-                                        --region "$DEPLOY_REGION" \
-                                        --command-id "$DEPLOY_CMD_ID" \
-                                        --instance-id "$DEPLOY_INSTANCE_ID" \
+                                        --region "$AWS_DEFAULT_REGION" \
+                                        --command-id "$deployCmdId" \
+                                        --instance-id "$INSTANCE_ID" \
                                         --query "StandardOutputContent" --output text
                                 '''
                             ).trim()
@@ -177,9 +170,9 @@ pipeline {
                                 returnStdout: true, 
                                 script: '''
                                     aws ssm get-command-invocation \
-                                        --region "$DEPLOY_REGION" \
-                                        --command-id "$DEPLOY_CMD_ID" \
-                                        --instance-id "$DEPLOY_INSTANCE_ID" \
+                                        --region "$AWS_DEFAULT_REGION" \
+                                        --command-id "$deployCmdId" \
+                                        --instance-id "$INSTANCE_ID" \
                                         --query "StandardErrorContent" --output text
                                 '''
                             ).trim()
@@ -207,7 +200,7 @@ pipeline {
 
                             def rollbackPayload = [
                                 DocumentName: 'AWS-RunShellScript',
-                                InstanceIds: [env.DEPLOY_INSTANCE_ID],
+                                InstanceIds: [env.INSTANCE_ID],
                                 Parameters: [commands: rollbackCommands]
                             ]
 
@@ -229,7 +222,7 @@ pipeline {
                                 returnStdout: true,
                                 script: '''
                                     set -e
-                                    CMD_ID=$(aws ssm send-command --region "$DEPLOY_REGION" --cli-input-json file:///tmp/ssm-rollback.json --query 'Command.CommandId' --output text)
+                                    CMD_ID=$(aws ssm send-command --region "$AWS_DEFAULT_REGION" --cli-input-json file:///tmp/ssm-rollback.json --query 'Command.CommandId' --output text)
                                     echo "$CMD_ID" | grep -Eq '^[0-9a-f-]{36}$' || (echo "Invalid CommandId format: $CMD_ID" >&2 && exit 1)
                                     printf '%s' "$CMD_ID"
                                 '''.stripIndent()
@@ -248,9 +241,9 @@ pipeline {
                                 returnStatus: true,
                                 script: '''
                                     aws ssm wait command-executed \
-                                        --region "$DEPLOY_REGION" \
+                                        --region "$AWS_DEFAULT_REGION" \
                                         --command-id "$ROLLBACK_CMD_ID" \
-                                        --instance-id "$DEPLOY_INSTANCE_ID"
+                                        --instance-id "$INSTANCE_ID"
                                 '''.stripIndent()
                             )
                             if (rbWaitRc != 0) {
@@ -261,9 +254,9 @@ pipeline {
                                 returnStdout: true, 
                                 script: '''
                                     aws ssm get-command-invocation \
-                                        --region "$DEPLOY_REGION" \
+                                        --region "$AWS_DEFAULT_REGION" \
                                         --command-id "$ROLLBACK_CMD_ID" \
-                                        --instance-id "$DEPLOY_INSTANCE_ID" \
+                                        --instance-id "$INSTANCE_ID" \
                                         --query "Status" --output text
                                 '''
                             ).trim()
@@ -272,9 +265,9 @@ pipeline {
                                 returnStdout: true, 
                                 script: '''
                                     aws ssm get-command-invocation \
-                                        --region "$DEPLOY_REGION" \
+                                        --region "$AWS_DEFAULT_REGION" \
                                         --command-id "$ROLLBACK_CMD_ID" \
-                                        --instance-id "$DEPLOY_INSTANCE_ID" \
+                                        --instance-id "$INSTANCE_ID" \
                                         --query "StandardOutputContent" --output text
                                 '''
                             ).trim()
@@ -283,9 +276,9 @@ pipeline {
                                 returnStdout: true, 
                                 script: '''
                                     aws ssm get-command-invocation \
-                                        --region "$DEPLOY_REGION" \
+                                        --region "$AWS_DEFAULT_REGION" \
                                         --command-id "$ROLLBACK_CMD_ID" \
-                                        --instance-id "$DEPLOY_INSTANCE_ID" \
+                                        --instance-id "$INSTANCE_ID" \
                                         --query "StandardErrorContent" --output text
                                 '''
                             ).trim()
