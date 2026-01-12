@@ -114,7 +114,7 @@ pipeline {
                                 echo "======================="
                             '''.stripIndent()
 
-                            def deployCmdId = sh(
+                            def cmdId = sh(
                                 returnStdout: true,
                                 script: '''
                                     set -e
@@ -129,17 +129,20 @@ pipeline {
                                 rm -f /tmp/ssm-deploy.json
                             '''.stripIndent()
 
-                            echo "SSM CommandId: ${deployCmdId}"
+                            echo "SSM CommandId: ${cmdId}"
                             
+                            env.DEPLOY_CMD_ID = cmdId
+
                             def waitRc = sh(
                                 returnStatus: true,
                                 script: '''
                                     aws ssm wait command-executed \
                                         --region "$AWS_DEFAULT_REGION" \
-                                        --command-id "$deployCmdId" \
+                                        --command-id "$DEPLOY_CMD_ID" \
                                         --instance-id "$INSTANCE_ID"
                                 '''.stripIndent()
                             )
+                            
                             if (waitRc != 0) {
                                 echo "SSM wait failed with rc=${waitRc}, fetching invocation output..."
                             }
@@ -149,7 +152,7 @@ pipeline {
                                 script: '''
                                     aws ssm get-command-invocation \
                                         --region "$AWS_DEFAULT_REGION" \
-                                        --command-id "$deployCmdId" \
+                                        --command-id "$DEPLOY_CMD_ID" \
                                         --instance-id "$INSTANCE_ID" \
                                         --query "Status" --output text
                                 '''
@@ -160,7 +163,7 @@ pipeline {
                                 script: '''
                                     aws ssm get-command-invocation \
                                         --region "$AWS_DEFAULT_REGION" \
-                                        --command-id "$deployCmdId" \
+                                        --command-id "$DEPLOY_CMD_ID" \
                                         --instance-id "$INSTANCE_ID" \
                                         --query "StandardOutputContent" --output text
                                 '''
@@ -171,7 +174,7 @@ pipeline {
                                 script: '''
                                     aws ssm get-command-invocation \
                                         --region "$AWS_DEFAULT_REGION" \
-                                        --command-id "$deployCmdId" \
+                                        --command-id "$DEPLOY_CMD_ID" \
                                         --instance-id "$INSTANCE_ID" \
                                         --query "StandardErrorContent" --output text
                                 '''
