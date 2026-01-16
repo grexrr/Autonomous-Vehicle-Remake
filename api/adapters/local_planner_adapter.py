@@ -14,7 +14,7 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from AutonomousVehicle.local_planner.model_predictive_control import ModelPredictiveControl, MPCResult
-from AutonomousVehicle.modeling.car import Car
+from AutonomousVehicle.modeling.Car import Car
 from api.event_types import MEASURED_STATE, LOCAL_PLANNER_CONTROL_SEQUENCE, LOCAL_PLANNER_TRAJECTORIES
 from .event_bus import EventBus
 from .process_adapter import ProcessAdapter

@@ -5,8 +5,8 @@ from typing import Any, Optional
 import numpy as np
 import numpy.typing as npt
 
-from AutonomousVehicle.modeling.car import Car
-from AutonomousVehicle.modeling.obstacles import Obstacles
+from AutonomousVehicle.modeling.Car import Car
+from AutonomousVehicle.modeling.Obstacles import Obstacles
 from api.adapters.global_planner_adapter import GlobalPlannerAdapter
 from api.adapters.local_planner_adapter import LocalPlannerAdapter
 from api.adapters.trajectory_collision_checking_adapter import TrajectoryCollisionCheckingAdapter

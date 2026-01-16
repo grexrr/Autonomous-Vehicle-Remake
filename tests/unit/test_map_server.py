@@ -2,7 +2,7 @@ import numpy as np
 from api.adapters.event_bus import EventBus
 from api.adapters.map_server import MapServerAdapter
 from api.event_types import MAP_INITIALIZED, KNOWN_OBSTACLES_UPDATED, NEW_OBSTACLES_DISCOVERED
-from AutonomousVehicle.modeling.car import Car
+from AutonomousVehicle.modeling.Car import Car
 
 
 def test_initialization():

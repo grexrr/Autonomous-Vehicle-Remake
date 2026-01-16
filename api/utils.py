@@ -3,7 +3,7 @@ from typing import Any, Optional
 import numpy as np
 import numpy.typing as npt
 
-from AutonomousVehicle.modeling.car import Car
+from AutonomousVehicle.modeling.Car import Car
 
 def serialize_car(car: Car) -> dict:
     """

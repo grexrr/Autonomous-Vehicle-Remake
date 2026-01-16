@@ -8,7 +8,7 @@ import numpy as np
 
 from api.adapters.event_bus import EventBus
 from api.adapters.car_simulation import CarSimulationAdapter
-from AutonomousVehicle.modeling.car import Car
+from AutonomousVehicle.modeling.Car import Car
 
 
 def test_initialization():

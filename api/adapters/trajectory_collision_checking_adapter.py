@@ -10,8 +10,8 @@ _project_root = Path(__file__).parent.parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from AutonomousVehicle.modeling.obstacles import Obstacles
-from AutonomousVehicle.modeling.car import Car
+from AutonomousVehicle.modeling.Obstacles import Obstacles
+from AutonomousVehicle.modeling.Car import Car
 from api.event_types import GLOBAL_PLANNER_TRAJECTORY, KNOWN_OBSTACLES_UPDATED, NEW_OBSTACLES_DISCOVERED, TRAJECTORY_COLLIDED
 from .event_bus import EventBus
 

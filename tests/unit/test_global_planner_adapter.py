@@ -8,8 +8,8 @@ from api.event_types import (
     GLOBAL_PLANNER_TRAJECTORY,
     GLOBAL_PLANNER_FINISHED
 )
-from AutonomousVehicle.modeling.car import Car
-from AutonomousVehicle.modeling.obstacles import Obstacles
+from AutonomousVehicle.modeling.Car import Car
+from AutonomousVehicle.modeling.Obstacles import Obstacles
 
 
 def test_initialization():

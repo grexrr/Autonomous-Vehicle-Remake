@@ -13,8 +13,8 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from AutonomousVehicle.constants import *
-from AutonomousVehicle.modeling.car import Car
-from AutonomousVehicle.modeling.obstacles import Obstacles
+from AutonomousVehicle.modeling.Car import Car
+from AutonomousVehicle.modeling.Obstacles import Obstacles
 from api.event_types import *
 from .event_bus import EventBus
 

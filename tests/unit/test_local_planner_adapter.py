@@ -10,7 +10,7 @@ from typing import Optional
 from api.adapters.event_bus import EventBus
 from api.adapters.local_planner_adapter import LocalPlannerAdapter, LocalPlanningTrajectories
 from api.event_types import MEASURED_STATE, LOCAL_PLANNER_CONTROL_SEQUENCE, LOCAL_PLANNER_TRAJECTORIES
-from AutonomousVehicle.modeling.car import Car
+from AutonomousVehicle.modeling.Car import Car
 
 
 def test_initialization():

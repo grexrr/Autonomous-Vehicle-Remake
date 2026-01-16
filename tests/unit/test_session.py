@@ -10,8 +10,8 @@ from unittest.mock import Mock
 from api.session import UserSession
 from api.adapters.event_bus import EventBus
 from api.event_types import *
-from AutonomousVehicle.modeling.car import Car
-from AutonomousVehicle.modeling.obstacles import Obstacles
+from AutonomousVehicle.modeling.Car import Car
+from AutonomousVehicle.modeling.Obstacles import Obstacles
 
 
 def test_initialization():
@@ -821,7 +821,7 @@ def test_push_without_socketio():
     
     # 尝试推送（应该安全返回，不抛出异常）
     try:
-        from AutonomousVehicle.modeling.car import Car
+        from AutonomousVehicle.modeling.Car import Car
         test_car = Car(10.0, 10.0, 0.0)
         session._push_state_update(1.0, test_car)
         print("  在没有 socketio 时安全返回")

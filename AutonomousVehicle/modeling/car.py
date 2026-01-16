@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 import numpy as np
 
 from ..utils.wrap_angle import wrap_angle
-from .obstacles import Obstacles
+from .Obstacles import Obstacles
 
 
 @dataclass(slots=True)

@@ -17,7 +17,7 @@ import scipy.interpolate
 import scipy.optimize
 
 from ..constants import *
-from ..modeling.car import Car
+from ..modeling.Car import Car
 from ..utils.wrap_angle import smooth_yaw
 
 NEARIST_POINT_SEARCH_RANGE = 20.0  # [m]

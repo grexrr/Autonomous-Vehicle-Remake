@@ -14,8 +14,8 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from AutonomousVehicle.global_planner.hybrid_a_star import Node, hybrid_a_star
-from AutonomousVehicle.modeling.car import Car
-from AutonomousVehicle.modeling.obstacles import Obstacles, ObstacleGrid
+from AutonomousVehicle.modeling.Car import Car
+from AutonomousVehicle.modeling.Obstacles import Obstacles, ObstacleGrid
 from api.event_types import GLOBAL_PLANNER_DISPLAY_SEGMENTS, GLOBAL_PLANNER_TRAJECTORY, GLOBAL_PLANNER_FINISHED
 
 from .process_adapter import ProcessAdapter

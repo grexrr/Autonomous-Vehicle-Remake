@@ -3,7 +3,7 @@ from typing import Optional, override
 import numpy as np
 import pyqtgraph as pg
 
-from ..modeling.car import Car
+from ..modeling.Car import Car
 
 
 class CarItem(pg.GraphicsObject):
