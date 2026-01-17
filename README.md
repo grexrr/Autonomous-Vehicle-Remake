@@ -260,7 +260,6 @@ def _distance_heuristic(grid: ObstacleGrid, goal_xy):
 
 #### 2. **state discretization + DP table (calc_ijk + dp pruning)**
 
-
 We need a consistent way to **deduplicate states** during A* search.
 Because the car state is continuous `(x, y, yaw)`, we discretize it into `(i, j, k)` so we can index a 3D DP table `dp[i, j, k]` and store the best-known `Node` for that discretized state.
 
@@ -634,6 +633,21 @@ def traceback_path(node: Node) -> NDArray:
 ---
 
 ### Local Planner (MPC)
+
+**Intuition** Think of MPC (Model Predictive Control) as:
+
+At every frame (each dt), I “look ahead into the future” for a few steps (the prediction horizon), simulating what would happen if I apply a sequence of throttle and steering inputs. I then pick the “least-bad” control sequence, but actually only execute the first step — the process repeats at the next frame.
+
+So, the core MPC loop is:
+
+- Give the current vehicle state (x, y, yaw, v)
+- Provide a reference trajectory you want the vehicle to follow
+- Search for a control sequence (accelerations, steering angles) over the next HORIZON_LENGTH steps
+- Make the vehicle “stick to” the trajectory as closely as possible, while keeping the controls smooth and not too aggressive
+- Output: the next few control actions + the predicted path
+
+In the demo, the global planner (Hybrid A*) provides a coarse route; MPC is responsible for making the car smoothly follow this route. In `main.py` you can also see how MPC is called: `mpc.update(state, DT)`, then you use `result.controls[1]` to update the car.
+
 
 **Model Predictive Control (MPC)** is an advanced control strategy used in the local planning of autonomous vehicles. It involves predicting the future behavior of the vehicle over a defined prediction horizon and optimizing the control inputs to achieve desired objectives. MPC takes into account the vehicle's dynamics, constraints, and a reference trajectory to minimize tracking errors and ensure smooth control actions. By solving an optimization problem at each time step, MPC provides a sequence of control actions that guide the vehicle along the optimal path while respecting physical and regulatory constraints.
 
