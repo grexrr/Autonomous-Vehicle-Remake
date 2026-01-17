@@ -93,6 +93,41 @@ Or you can launch the `start_app` script instead should automatically fix the is
 python start_app.py
 ```
 
+## Event Management and Architecture
+
+[TODO]
+
+## Test-Demo
+
+### Collision Detection Test
+
+```bash
+python -m demo.test_collision
+```
+Tests vehicle collision detection system with animated car movement. Shows real-time collision checking as the car moves through an obstacle environment with visual feedback.
+
+![Autonomous Vehicle Collision Detection Demo](./test_output/collision_demo_20250910_171221.gif)
+
+
+### Hybrid A* Path Planning
+
+```bash
+python -m demo.test_hybridAstar
+```
+This is a complete demonstration of Hybrid A* path planning. It tests various scenarios, including diagonal navigation, goal orientation alignment, and corridor traversal, and visualizes the planned path results.
+
+#### Scenario 1: Diagonal Path Planning
+![Diagonal Path Planning](./test_output/hybrid_astar_diagonal.gif)
+**Description:** The vehicle plans a diagonal path from the bottom left (5,5) to the top right (55,55). This demonstrates the Hybrid A* algorithm's pathfinding capability in a complex obstacle environment, where the vehicle needs to navigate around two vertical poles to reach the target position.
+
+#### Scenario 2: Goal Orientation Alignment
+![Goal Orientation Alignment](./test_output/hybrid_astar_diagonal_90.gif)
+**Description:** Tests the algorithm's ability to handle terminal constraints. The vehicle starts from (5,5,0°) and the target position is (55,55,90°), requiring both position and orientation alignment. The algorithm achieves precise goal orientation alignment through a combination of forward and reverse maneuvers.
+
+#### Scenario 3: Corridor Navigation
+![Corridor Navigation](./test_output/hybrid_astar_corridor.gif)
+
+**Description:** The vehicle navigates through a narrow corridor between two poles, from (30,8,90°) to (30,52,90°). This scenario tests the algorithm's path planning capability in constrained spaces, requiring precise vehicle control to avoid collisions.
 
 ## [Dev-log] Core Algorithm
 
@@ -634,7 +669,11 @@ def traceback_path(node: Node) -> NDArray:
 
 ### Local Planner (MPC)
 
-**Intuition** Think of MPC (Model Predictive Control) as:
+#### 1. Intuition
+
+**Model Predictive Control (MPC)** is an advanced control strategy used in the local planning of autonomous vehicles. It involves predicting the future behavior of the vehicle over a defined prediction horizon and optimizing the control inputs to achieve desired objectives. MPC takes into account the vehicle's dynamics, constraints, and a reference trajectory to minimize tracking errors and ensure smooth control actions. By solving an optimization problem at each time step, MPC provides a sequence of control actions that guide the vehicle along the optimal path while respecting physical and regulatory constraints.
+
+Think of **MPC** as:
 
 At every frame (each dt), I “look ahead into the future” for a few steps (the prediction horizon), simulating what would happen if I apply a sequence of throttle and steering inputs. I then pick the “least-bad” control sequence, but actually only execute the first step — the process repeats at the next frame.
 
@@ -649,100 +688,600 @@ So, the core MPC loop is:
 In the demo, the global planner (Hybrid A*) provides a coarse route; MPC is responsible for making the car smoothly follow this route. In `main.py` you can also see how MPC is called: `mpc.update(state, DT)`, then you use `result.controls[1]` to update the car.
 
 
-**Model Predictive Control (MPC)** is an advanced control strategy used in the local planning of autonomous vehicles. It involves predicting the future behavior of the vehicle over a defined prediction horizon and optimizing the control inputs to achieve desired objectives. MPC takes into account the vehicle's dynamics, constraints, and a reference trajectory to minimize tracking errors and ensure smooth control actions. By solving an optimization problem at each time step, MPC provides a sequence of control actions that guide the vehicle along the optimal path while respecting physical and regulatory constraints.
+**Movement Modeling of `Car`**
 
-#### Prediction Horizon
-Choose a prediction length $N$ (e.g., 10 steps) and a step size $\Delta t$ (your `LOCAL_PLANNER_DELTA_TIME`). The Local Planner only focuses on the next $N$ steps at a time.
+What `Car.update_with_control()` does:
 
-#### Vehicle Model (Kinematic Bicycle Model)
-Given:
-- $u_k = [a_k, \delta_k]$: throttle/brake (longitudinal acceleration $a_k$) and front wheel steering angle $\delta_k$
-- $L$: wheelbase (`Car.WHEEL_BASE`)
+- The car first moves a small step forward based on its current speed and heading
+- Then, its velocity gradually approaches the target_velocity (limited by the maximum acceleration)
+- Then, its steering angle gradually approaches the target_steer (limited by the maximum steering rate)
 
-The discretized kinematic model is:
+In other words: the control input does not "instantly teleport" the car to a new state, but instead, the state changes gradually under physical constraints.
 
-$$
-\begin{aligned}
-X_{k+1} &= X_k + v_k \cos\psi_k\,\Delta t \\
-Y_{k+1} &= Y_k + v_k \sin\psi_k\,\Delta t \\
-v_{k+1} &= v_k + a_k\,\Delta t \\
-\psi_{k+1} &= \psi_k + \frac{v_k}{L}\tan\delta_k\,\Delta t
-\end{aligned}
-$$
+MPC works by planning controls that make the car follow the trajectory while respecting these constraints.
 
-#### Scoring (Objective Function)
-The goal is for the vehicle to follow the reference trajectory closely while maintaining smooth control actions:
+**Scoring Rule**
 
-$$
-J=\sum_{k=0}^{N}\|x_k - x_k^{\mathrm{ref}}\|_Q^2 + \sum_{k=0}^{N-1}\|u_k - u_k^{\mathrm{ref}}\|_R^2 + \sum_{k=0}^{N-2}\|\Delta u_k\|_{R_\Delta}^2
-$$
+For the matrices:
+- `R`: Penalizes "excessively large control inputs" (throttle/steering too aggressive)
+- `R_D`: Penalizes "rapid changes in control" (jittery actions)
+- `Q`: Penalizes "deviation of state from reference trajectory"
+- `Q_F`: Heavier penalty at the final state (final step matters most)
 
-Where:
-- The first term: tracking error in position/orientation/velocity (usually $Y$ and $\psi$ have higher weights)
-- The second term: avoid sudden throttle or steering changes
-- The third term: change in control between consecutive frames, ensuring smoothness (avoiding "jerky steering")
+You can think of it as a "scoring function":
+- If the vehicle deviates from the path → subtract points (`Q`)
+- If throttle/steering is too aggressive → subtract points (`R`)
+- If actions are jittery, e.g., rapidly switching left/right → subtract points (`R_D`)
+- Being close to the final target at the last step matters even more → subtract more points (`Q_F`)
 
-#### Hard Constraints (Physical/Regulatory)
-1. Steering limit:
-$$|\delta_k| \le \delta_{\max}\$$
-2. Acceleration limit:
-$$|a_k| \le a_{\max}\$$
-3. Speed range:
-$$0 \le v_k \le v_{\max}\$$
-4. Lateral acceleration limit (critical!):
-$$\Bigl|a_{y,k}\Bigr| = \left|\frac{v_k^{2}\tan\delta_k}{L}\right|
-\le a_{y,\max}\ $$
+What MPC does: under constraints, it finds the set of control actions that minimize the total penalty score.
 
-Commonly used **speed-dependent steering angle limit**:
+#### 2. **The Structuring of the Computation**
 
-$$|\delta_k| \le \min\left( \delta_{\max}, \arctan\frac{a_{y,\max} L}{\max(v_k^{2}, \varepsilon)} \right)$$
+There are mainly **4 parts** in the MPC module:
 
-> The faster you go, the smaller the allowable steering angle to prevent skidding.
+- Linearized model: _get_linear_model_matrix()
+- Prediction (rollout): _predict_motion()
+- Solving the optimization problem with cvxpy: _linear_mpc_control()
+- Preparing the "reference trajectory" into an MPC-usable form + per-frame update: ModelPredictiveControl class
 
-#### Solution (QP + Iterative Linearization)
-This is a **constrained Quadratic Programming (QP)** problem.
+---
 
-For linear solvability, **iterative linearization** is commonly used:
-1. Use the current "nominal trajectory" $(\bar{x}_k, \bar{u}_k)$ (can be the last solution or a zero-control rollout)
-2. Linearize the model at the nominal trajectory:
-   $$x_{k+1} \approx A_k x_k + B_k u_k + C_k$$
-3. Solve a QP (cost function + hard constraints)
-4. Roll out the solution $U$ to update the nominal trajectory
-5. Repeat 1–3 times (usually 1–3 iterations are sufficient)
+**Part 1. `_get_linear_model_matrix()`**
 
-Execution method:
-- Execute only the first control $u_0$ obtained from this optimization
-- Recalculate in the next step (rolling optimization)
+The real vehicle model is **nonlinear** (it involves $\cos\psi$, $\sin\psi$, and $\tan\delta$ terms). Solving nonlinear optimal control problems directly is computationally expensive and often intractable for real-time applications. 
 
+MPC uses a clever trick: instead of solving the nonlinear problem globally, we **linearize** the model around a reference trajectory. This transforms the nonlinear optimization into a **quadratic programming (QP)** problem, which can be solved efficiently using standard solvers (like OSQP or CVXPY).
 
-## Test-Demo
+> **Kinematic Bicycle Model**
+>
+> Given:
+> - $u_k = [a_k, \delta_k]$: throttle/brake (longitudinal acceleration $a_k$) and front wheel steering angle $\delta_k$
+> - $L$: wheelbase (`Car.WHEEL_BASE`)
+>The discretized kinematic model is:
+>$$
+>\begin{aligned}
+>X_{k+1} &= X_k + v_k \cos\psi_k\,\Delta t \\
+>Y_{k+1} &= Y_k + v_k \sin\psi_k\,\Delta t \\
+>v_{k+1} &= v_k + a_k\,\Delta t \\
+>\psi_{k+1} &= \psi_k + \frac{v_k}{L}\tan\delta_k\,\Delta t
+>\end{aligned}
+>$$
 
-### Collision Detection Test
+**1.1 The Mathematical Principle**
 
-```bash
-python -m demo.test_collision
-```
-Tests vehicle collision detection system with animated car movement. Shows real-time collision checking as the car moves through an obstacle environment with visual feedback.
+The linearization is based on the **first-order Taylor expansion**. For a nonlinear function $f(x, u)$, we approximate it around a reference point $(\bar{x}, \bar{u})$:
 
-![Autonomous Vehicle Collision Detection Demo](./test_output/collision_demo_20250910_171221.gif)
+$$f(x, u) \approx f(\bar{x}, \bar{u}) + \frac{\partial f}{\partial x}\Big|_{\bar{x},\bar{u}}(x - \bar{x}) + \frac{\partial f}{\partial u}\Big|_{\bar{x},\bar{u}}(u - \bar{u})$$
 
+For the bicycle model, this gives us a linear discrete-time model:
 
-### Hybrid A* Path Planning
+$$X[t+dt] = A \cdot X[t] + B \cdot u[t] + C$$
 
-```bash
-python -m demo.test_hybridAstar
-```
-This is a complete demonstration of Hybrid A* path planning. It tests various scenarios, including diagonal navigation, goal orientation alignment, and corridor traversal, and visualizes the planned path results.
+where:
+- **$A$** (state matrix): describes how the current state $X[t]$ affects the next state
+- **$B$** (input matrix): describes how the control input $u[t]$ affects the next state  
+- **$C$** (affine term): constant offset that accounts for the linearization around the reference point
 
-#### Scenario 1: Diagonal Path Planning
-![Diagonal Path Planning](./test_output/hybrid_astar_diagonal.gif)
-**Description:** The vehicle plans a diagonal path from the bottom left (5,5) to the top right (55,55). This demonstrates the Hybrid A* algorithm's pathfinding capability in a complex obstacle environment, where the vehicle needs to navigate around two vertical poles to reach the target position.
+**1.2 The "Small dt" Assumption**
 
-#### Scenario 2: Goal Orientation Alignment
-![Goal Orientation Alignment](./test_output/hybrid_astar_diagonal_90.gif)
-**Description:** Tests the algorithm's ability to handle terminal constraints. The vehicle starts from (5,5,0°) and the target position is (55,55,90°), requiring both position and orientation alignment. The algorithm achieves precise goal orientation alignment through a combination of forward and reverse maneuvers.
+The key assumption is that within a very small time step `dt` (typically 0.1-0.2 seconds), the vehicle's velocity, yaw angle, and steering angle remain **almost constant**. This is reasonable because:
+- Vehicles have physical limits on how fast they can change speed, direction, and steering
+- Over a short time interval, these changes are small compared to their current values
+- The linearization error is proportional to the size of `dt` — smaller `dt` means better approximation
 
-#### Scenario 3: Corridor Navigation
-![Corridor Navigation](./test_output/hybrid_astar_corridor.gif)
+**1.3 Physical Interpretation of the Matrices**
 
-**Description:** The vehicle navigates through a narrow corridor between two poles, from (30,8,90°) to (30,52,90°). This scenario tests the algorithm's path planning capability in constrained spaces, requiring precise vehicle control to avoid collisions.
+The matrices have intuitive meanings:
+
+- **$A[0,2] = dt \cdot \cos(\psi)$**: How velocity affects X-position (depends on heading)
+- **$A[1,2] = dt \cdot \sin(\psi)$**: How velocity affects Y-position (depends on heading)
+- **$A[0,3] = -dt \cdot v \cdot \sin(\psi)$**: How yaw angle affects X-position (cross-coupling term)
+- **$A[1,3] = dt \cdot v \cdot \cos(\psi)$**: How yaw angle affects Y-position (cross-coupling term)
+- **$A[3,2] = dt \cdot \tan(\delta) / L$**: How velocity affects yaw rate (steering effect)
+- **$B[2,0] = dt$**: How acceleration directly affects velocity (simple integration)
+- **$B[3,1] = dt \cdot v / (L \cdot \cos^2(\delta))$**: How steering angle affects yaw rate (depends on speed and wheelbase)
+
+**1.4 The Affine Term $C$**
+
+The $C$ vector captures the "offset" from linearization. It accounts for terms that don't fit into the $AX + Bu$ form, ensuring the linearized model matches the nonlinear model at the reference point.
+
+**1.5 Why This Matters**
+
+- **Computational efficiency**: QP problems can be solved in milliseconds, enabling real-time control
+- **Stability**: Linear models are easier to analyze and stabilize
+- **Iterative refinement**: MPC solves this linearized problem iteratively, refining the reference trajectory each time (see Part 2)
+
+**1.6 Trade-offs**
+
+- **Accuracy vs. Speed**: Smaller `dt` improves accuracy but requires more computation
+- **Linearization error**: The approximation is only valid near the reference trajectory
+- **Iterative convergence**: If the initial guess is poor, it may take several iterations to converge
+
+Here, `X` is `[x, y, v, yaw]`, and `u` is `[accel, steer]`. The `Car.WHEEL_BASE` parameter appears in the yaw dynamics, reflecting how the distance between front and rear axles affects turning behavior.
+
+---
+
+**Part 2. `_predict_motion()`: Use the "previous round of controls" to first guess a future trajectory**
+
+MPC solves the optimization problem iteratively. Like any iterative solver, it needs a starting point (initial guess) to begin the optimization process:
+
+- The vehicle dynamics model (bicycle model) is **nonlinear** (notice the $\cos\psi_k$, $\sin\psi_k$, and $\tan\delta_k$ terms)
+- To make the optimization tractable, we linearize the model around a reference trajectory
+- This reference trajectory comes from the initial guess: we predict where the vehicle would go if we applied a certain control sequence
+
+**2.1 The Question: What Control Sequence for Initial Guess?**
+
+The question is: what control sequence should we assume for the next $N$ steps as our initial guess?
+
+**2.2 The Initial Guess Strategy**
+
+- Initialize the `controls` as all zeros: `[accel=0, steer=0]` for all $N$ steps
+  - This means: "assume we maintain current speed and go straight"
+  - It's a safe, conservative starting point that avoids aggressive initial guesses
+- Use `Car.update_with_control()` to simulate forward: starting from the **current state** (position, velocity, yaw), apply these zero controls step by step for $N$ time steps
+   - This produces a predicted trajectory: `states = [[x, y, v, yaw], ...]` (length $N+1$)
+      - The first point is the current state: `[x_0, y_0, v_0, \psi_0]`
+      - The next $N$ points are predicted future states: `[x_1, y_1, v_1, \psi_1]`, ..., `[x_N, y_N, v_N, \psi_N]`
+      - **In simple terms**: Based on the current heading and velocity, we simulate forward $N$ steps with zero control inputs, generating $N$ additional predicted state points
+
+**2.3 How This Is Used**
+
+This predicted trajectory (often denoted as $\bar{x}$) becomes the **linearization point**. In the next step (`_get_linear_model_matrix()`), we linearize the nonlinear bicycle model around each point in this trajectory. This transforms the nonlinear optimization problem into a **quadratic programming (QP)** problem, which can be solved efficiently.
+
+**2.4 Why This Works**
+
+- If the initial guess is close to the optimal solution, the linearization is accurate and the solver converges quickly
+- Even if the guess is poor, the iterative nature of MPC means we'll refine it in subsequent iterations
+- Using zero controls is reasonable because: (1) it's safe (no sudden movements), (2) it's simple, and (3) the optimizer will quickly adjust it toward the optimal solution
+
+---
+
+**Part 3. `_linear_mpc_control()`: How CVXPY solves the problem**
+
+The key point here: it formulates the problem as a convex optimization (quadratic program/QP), and then lets CVXPY solve it.
+
+> **Quadratic Programming (QP)**
+>
+> **QP** is a special type of optimization problem where:
+> - **Objective function** is quadratic (contains terms like $x^T Q x$)
+> - **Constraints** are linear (equalities $Ax = b$ and inequalities $Cx \leq d$)
+>
+> **General QP form:**
+> $$
+> \begin{aligned}
+> \min_x \quad & \frac{1}{2}x^T Q x + q^T x \\
+> \text{s.t.} \quad & Ax = b \\
+> & Cx \leq d
+> \end{aligned}
+> $$
+>
+> **Why QP is special:**
+> - **Convex**: If $Q$ is positive semi-definite, the problem is convex, meaning any local minimum is also the global minimum
+> - **Efficient solvers**: QP problems can be solved very quickly (milliseconds) using specialized algorithms (interior-point methods, active-set methods)
+> - **Well-understood**: Decades of research have produced robust, reliable solvers
+
+**3.1 QP in MPC Context**
+
+- The **cost function** (tracking error, control effort) is quadratic: $\|x - x_{ref}\|_Q^2 + \|u\|_R^2$
+- The **dynamics** (after linearization) become linear constraints: $x_{k+1} = A x_k + B u_k + C$
+- The **physical limits** (speed, acceleration, steering bounds) are linear inequalities
+
+This is why MPC can run in real-time: the nonlinear problem is transformed into a QP, which modern solvers (like OSQP, used by CVXPY) can solve extremely fast.
+
+**3.2 Decision Variables**
+
+- **$x$**: The next `HORIZON_LENGTH + 1` state vectors (shape $N_X \times (H+1)$)
+- **$u$**: The next `HORIZON_LENGTH` control inputs (shape $N_U \times H$)
+
+In other words: we need to decide all control actions for the next $H$ steps at once.
+
+**3.3 Cost Function (What We're Trying to Minimize)**
+
+The cost function measures how "good" a solution is. The solver tries to find the control sequence that minimizes this total cost. The cost is computed by looping over each time step $t$ and summing up penalty terms:
+
+- **Control effort penalty** (`quad_form(u, R)`): Smaller control inputs are better
+  - Why: Saves energy, reduces wear, and avoids aggressive maneuvers
+  - Example: Prefer gentle acceleration over hard braking when possible
+
+- **Tracking error penalty** (`quad_form(x_{ref} - x, Q)`): Closer tracking to the reference trajectory is better
+  - Why: We want the vehicle to follow the planned path accurately
+  - The weight matrix $Q$ determines which states matter more (typically $Y$ position and yaw angle have higher weights than $X$ position)
+
+- **Control smoothness penalty** (`quad_form(u[t] - u[t-1], R_D)`): Smaller changes between consecutive control actions are better
+  - Why: Prevents jerky motion (sudden steering changes, abrupt acceleration/braking)
+  - This is crucial for passenger comfort and vehicle stability
+
+- **Final state penalty** (`quad_form(x_{ref}[H] - x[H], Q_F)`): The final predicted state should be close to the reference
+  - Why: Ensures the vehicle is on track at the end of the prediction horizon
+  - Typically $Q_F$ has larger weights than $Q$ to emphasize terminal accuracy
+
+**In simple terms**: The cost function balances three competing goals:
+1. **Follow the path** (tracking)
+2. **Be gentle** (small, smooth controls)
+3. **End up in the right place** (terminal accuracy)
+
+The weight matrices ($Q$, $R$, $R_D$, $Q_F$) determine the relative importance of these goals. Tuning these weights is a key part of MPC design.
+
+**3.4 Constraints**
+
+Constraints are the "rules" that the solution must follow. These are the most engineering-heavy but also most intuitive part of MPC. They ensure the solution is physically feasible and safe.
+
+**3.4.1 Physical/Regulatory Constraints (Hard Limits)**
+
+These constraints represent real-world physical limits that the vehicle cannot exceed:
+
+> 1. **Steering limit:**  
+>    $$
+>    |\delta_k| \le \delta_{\max}
+>    $$
+>    The steering angle cannot exceed the maximum steering angle of the vehicle (e.g., ±30°). This is a mechanical limit of the steering system.
+>
+> 2. **Acceleration limit:**  
+>    $$
+>    |a_k| \le a_{\max}
+>    $$
+>    The longitudinal acceleration (throttle/brake) is limited by the engine power and braking capacity. You can't accelerate or brake infinitely fast.
+>
+> 3. **Speed range:**  
+>    $$
+>    0 \le v_k \le v_{\max}
+>    $$
+>    The vehicle speed must be non-negative (can't go backwards in this model) and cannot exceed the maximum speed (engine/road limits).
+>
+> 4. **Lateral acceleration limit (critical!):**  
+>    $$
+>    \Bigl|a_{y,k}\Bigr| = \left|\frac{v_k^{2}\tan\delta_k}{L}\right| \le a_{y,\max}
+>    $$
+>    This is the **most important safety constraint**. When you turn at high speed, the vehicle experiences lateral (sideways) acceleration. If this exceeds the tire friction limit, the vehicle will skid. The formula shows that lateral acceleration increases with the square of speed and the steering angle.
+>
+>    **Commonly used speed-dependent steering angle limit:**
+>    $$
+>    |\delta_k| \le \min\left( \delta_{\max},\, \arctan\frac{a_{y,\max} L}{\max(v_k^{2}, \varepsilon)} \right)
+>    $$
+>    This combines the mechanical steering limit with the lateral acceleration limit. **The faster you go, the smaller the allowable steering angle to prevent skidding.** This is why you can't make sharp turns at high speeds in real life.
+
+**3.4.2 Implementation Constraints (How the Solver Works)**
+
+These constraints ensure the mathematical formulation is correct and the solution respects the vehicle dynamics:
+
+1. **Dynamics constraint**: The next state must equal what the linearized model predicts:
+   $$x_{k+1} = A \cdot x_k + B \cdot u_k + C$$
+   This ensures the predicted trajectory actually follows the vehicle's physics (as approximated by the linearized model).
+
+2. **Initial steering constraint**: By default, the first control step cannot immediately change the steering angle:
+   $$u[1, 0] = \text{last\_steer}$$
+   This prevents sudden steering changes that would be physically impossible (steering wheels don't turn instantly).
+
+3. **Steering rate limit**: The change in steering angle between consecutive steps is limited:
+   $$|\Delta \delta_k| = |\delta_k - \delta_{k-1}| \le \text{MAX\_STEER\_SPEED} \times dt$$
+   This models the physical limit on how fast the steering wheel can turn (e.g., maximum steering rate of 30°/s).
+
+4. **Speed bounds**: 
+   $$\text{MIN\_SPEED} \le v_k \le \text{MAX\_SPEED}$$
+   Enforces the speed range constraint at every time step.
+
+5. **Acceleration bounds**: 
+   $$|a_k| \le \text{MAX\_ACCEL}$$
+   Limits the throttle/brake input at every step.
+
+6. **Steering bounds**: 
+   $$|\delta_k| \le \text{MAX\_STEER}$$
+   Limits the steering angle at every step (may be further restricted by speed-dependent limit above).
+
+7. **Initial state constraint**: The first state must match the current vehicle state:
+   $$x[:, 0] = \bar{x}[:, 0]$$
+   This "anchors" the optimization to start from where the vehicle actually is right now.
+
+**3.5 Solving the QP Problem**
+
+Finally, `cvxpy.Problem(...).solve(...)` uses the **CLARABEL** solver (or OSQP) to find the optimal solution. 
+
+- If a solution is found: returns the optimal control sequence and predicted states
+- If no solution exists (infeasible): prints an error and returns `None`
+  - This can happen if constraints are too tight (e.g., trying to make an impossible turn)
+  - In practice, the MPC should be designed so this rarely happens
+
+**3.6 Why Constraints Matter**
+
+- **Safety**: Prevents the optimizer from suggesting physically impossible or dangerous maneuvers
+- **Realism**: Ensures the solution can actually be executed by a real vehicle
+- **Stability**: Helps the MPC produce smooth, predictable behavior 
+
+---
+
+**Part 4. Trajectory Preprocessing**
+
+**The Problem: Why Preprocessing is Critical**
+
+MPC is very sensitive to two common issues in reference trajectories:
+
+1. **Yaw angle discontinuities**: When the yaw angle jumps suddenly (e.g., from $+\pi$ to $-\pi$)
+   - This happens because angles wrap around at $\pm\pi$
+   - Direct interpolation between $+\pi$ and $-\pi$ would make the vehicle "spin" 360°, which is physically impossible
+   - MPC's linearization breaks down when the reference trajectory has such discontinuities
+
+2. **Forward/reverse direction switches without stopping**: When the trajectory switches from forward to reverse (or vice versa) but doesn't require the vehicle to stop first
+   - You cannot instantly switch from high-speed forward to reverse
+   - The vehicle must come to a complete stop before changing direction
+   - Without this, MPC will try to find an impossible solution
+
+Therefore, the initialization process performs extensive preprocessing to make the trajectory "trackable" by MPC.
+
+**Step 4.1: Input Format Requirements**
+
+The `ref_trajectory` must have the format: each row is `[x, y, yaw, direction]`, where:
+- `direction` can only be `+1` (forward) or `-1` (reverse), **never 0**
+- This matches the output format from the global planner (Hybrid A* traceback also outputs a `direction` column)
+
+**Step 4.2: Remove Consecutive Duplicate Points**
+
+Duplicate points (same x, y coordinates) are removed to prevent issues with:
+- **Interpolation**: Can't interpolate between identical points
+- **Distance calculations**: Zero distance between points causes division by zero
+- **Spline fitting**: Duplicates make the spline ill-conditioned
+
+**Step 4.3: Smooth Yaw Angles (`smooth_yaw`)**
+
+**The problem**: Angles have a "wrap-around" at $\pm\pi$. Direct interpolation between $+\pi$ and $-\pi$ would cause a sudden jump of $2\pi$ radians (360°), which is physically impossible.
+
+**The solution**: `smooth_yaw()` processes the yaw sequence:
+1. Computes the difference between consecutive yaw angles
+2. Wraps each difference to the range $[-\pi, \pi]$ using `wrap_angle()`
+3. Cumulatively sums these wrapped differences to create a continuous sequence
+
+**Example**:
+- Input: `[0, π/2, π, -π, -π/2]` (has a jump at the 4th element)
+- After wrapping differences: `[0, π/2, π/2, 0, π/2]` (no jump)
+- After cumulative sum: `[0, π/2, π, π, 3π/2]` (continuous, no sudden jumps)
+
+This is called in initialization: `ref_trajectory[:, 2] = smooth_yaw(...)`
+
+**Step 4.4: Handle Forward/Reverse Direction Switches**
+
+**This is critical logic**: When the `direction` changes (from +1 to -1 or vice versa):
+
+1. **Insert additional points** near the switch point to create a smooth transition
+2. **Set the speed to 0** at the switch point
+3. **Set the goal point speed to 0** as well
+
+**Why this matters**: You cannot instantly switch from high-speed forward to reverse. The vehicle must come to a complete stop first. This constraint is enforced by setting $v = 0$ at direction change points, ensuring MPC plans a stop before reversing.
+
+**Physical intuition**: Think of parallel parking — you must stop completely before shifting from forward to reverse gear.
+
+**Step 4.5: Convert Direction to Target Velocity**
+
+The `direction` column (values +1 or -1) is converted to target velocity:
+- Multiply by `Car.TARGET_SPEED` to get the desired speed magnitude
+- Apply direction: positive for forward (+1), negative for reverse (-1)
+- Clip to the vehicle's speed range: `[MIN_SPEED, MAX_SPEED]` or `[-MAX_SPEED, -MIN_SPEED]` for reverse
+
+**Step 4.6: Reorder Columns to Match MPC State Format**
+
+The trajectory is reordered from `[x, y, yaw, direction]` to `[x, y, v, yaw]` to match MPC's state definition where `NX = 4` and the state vector is `[x, y, v, yaw]`.
+
+**Step 4.7: Create Cumulative Distance Parameter `u`**
+
+The trajectory is parameterized by cumulative distance along the path:
+1. Compute distances between consecutive points: `dists = [d_0, d_1, ..., d_{n-1}]`
+2. Cumulative sum: `u = [0, d_0, d_0+d_1, ..., total_distance]`
+
+**Think of `u` as a "progress bar" along the trajectory**: 
+- `u = 0` at the start
+- `u = total_distance` at the end
+- Any value in between represents a point along the path
+
+**Why this is useful**: 
+- All "find nearest point" and "interpolate future horizon" operations work on this `u` parameter
+- It's easier to interpolate along a 1D parameter (distance) than in 2D space (x, y)
+- Makes it simple to query "what should the state be at distance `u` from the start?"
+
+**Step 4.8: Speed Limit Based on Braking Distance**
+
+When there's a point with $v = 0$ ahead (stop point or direction switch), the code enforces a speed limit based on braking distance:
+
+**The physics**: To stop safely, you need enough distance to decelerate. The maximum speed at distance $d$ from a stop point is:
+$$v_{\max} = \sqrt{2 \cdot a_{\max} \cdot d}$$
+
+where $a_{\max}$ is the maximum deceleration.
+
+**In practice**: The closer you are to a stop point, the lower the allowed speed (otherwise you can't brake in time). This prevents MPC from planning trajectories that would require impossible braking.
+
+**You don't need to memorize the formula** — because I don't... Just understand: "the closer to a stop, the slower you must go."
+
+**Step 4.9: Speed Limit Based on Curvature (Centripetal Acceleration)**
+
+The code computes the trajectory's curvature using spline interpolation (`_get_curvature()`).
+
+**The physics**: When turning, the vehicle experiences centripetal (lateral) acceleration:
+$$a_{\text{centripetal}} = \frac{v^2}{R} = v^2 \cdot \kappa$$
+
+where $R$ is the turning radius and $\kappa$ (kappa) is the curvature.
+
+**The constraint**: To prevent skidding, lateral acceleration must not exceed the tire friction limit:
+$$v^2 \cdot \kappa \le a_{y,\max}$$
+
+**The speed limit**: 
+$$v_{\max} = \sqrt{\frac{a_{y,\max}}{\kappa}}$$
+
+**In simple terms**: 
+- **Sharper turns** (higher curvature) → **lower maximum speed**
+- This is why you slow down before tight corners in real driving
+- The formula ensures MPC never plans speeds that would cause the vehicle to skid
+
+**Step 4.10: Create Interpolatable Spline**
+
+Finally, the entire reference trajectory is converted into a **B-spline** using `splprep(...)` and stored as `self._tck`.
+
+**What this enables**:
+- Given any distance parameter `u` (from Step 4.7), the spline can interpolate the corresponding state `[x, y, v, yaw]`
+- Smooth, continuous trajectory representation
+- Efficient querying: "What should the state be at progress `u` along the path?"
+
+**Why splines?**
+- **Smoothness**: Splines provide smooth interpolation between discrete waypoints
+- **Efficiency**: Once constructed, querying any point is very fast
+- **Flexibility**: Can easily sample the trajectory at any resolution needed for MPC
+
+**Summary of Preprocessing Pipeline:**
+
+1. Format validation and duplicate removal
+2. Yaw smoothing (handle angle wrap-around)
+3. Direction switch handling (enforce stops)
+4. Direction → velocity conversion
+5. Column reordering
+6. Distance parameterization
+7. Braking distance speed limits
+8. Curvature-based speed limits
+9. Spline construction
+
+The result is a **smooth, physically feasible, MPC-friendly reference trajectory** that respects all vehicle constraints and can be efficiently queried during MPC execution.
+
+---
+
+#### 3. **Execution: What Happens During Runtime**
+
+`update(state, dt)` is the entry point called every frame during execution. This is where MPC actually runs in real-time, processing the current vehicle state and producing control commands.
+
+**Step 1. Finding the Reference Segment (`_find_xref()`)**
+
+Before solving the optimization problem, MPC needs to extract a "reference segment" from the global trajectory that represents what the vehicle should follow over the next prediction horizon.
+
+**Step 2. Finding the Nearest Point on Trajectory**
+
+`_find_nearest_point()` locates the closest point on the trajectory to the current vehicle position:
+- Starts from the current progress `self._cur_u` (where we were last frame)
+- Uses **hill climbing** to search forward slightly, finding the "locally nearest" point
+- **Why "local" search?** Prevents the algorithm from "jumping" to a distant point on the trajectory (e.g., if the vehicle is slightly off-path, we want to find the nearest point ahead, not jump to a point far behind)
+
+**Step 3. Determining Horizon Length**
+
+The horizon length (how far ahead to look) is computed as:
+$$\text{length} = \max(\text{MIN\_HORIZON\_DISTANCE}, v \times dt \times \text{HORIZON\_LENGTH})$$
+
+**Intuition**: 
+- **Faster vehicles** → look further ahead (speed × time × steps)
+- **Slower vehicles** → at least look a minimum distance ahead
+- This adaptive horizon ensures MPC has enough "look-ahead" time to plan smooth maneuvers
+
+**Step 4. Interpolating Reference States**
+
+Using the spline created during preprocessing (Step 4.10), the code interpolates reference states at evenly spaced `u` values over the horizon:
+- Input: array of `u` values (distance parameters)
+- Output: `xref` with shape $(H+1) \times 4$ (e.g., $6 \times 4$ if $H=5$)
+- Each row is `[x, y, v, yaw]` at that point along the trajectory
+
+**Step 5. Handling Direction Switches in Horizon**
+
+If the horizon range contains a direction switch point (forward ↔ reverse):
+
+**Option 1**: Advance the starting point to the switch point (if close enough, skip past it)
+- Prevents MPC from trying to plan through an impossible instant direction change
+
+**Option 2**: Truncate the horizon and pad it, forcing the vehicle to "stop at the switch point first"
+- Ensures the vehicle comes to a complete stop before changing direction
+- The padded segment has zero velocity, giving MPC time to plan the stop
+
+--- 
+
+**Braking Logic**
+
+If braking is needed (`self._brake` flag is set, or the vehicle has reached the goal):
+- Sets reference velocity to 0 for all points in the horizon
+- Optionally sets the final point to a **negative velocity** to help the vehicle brake more aggressively
+- This ensures MPC plans a smooth deceleration to a complete stop
+
+**The Goal**
+
+The entire logic in `_find_xref()` has one goal: **ensure that every frame, the reference trajectory fed to the optimizer is reachable, reasonable, and doesn't require impossible maneuvers** (like teleportation or instant direction changes).
+
+**Yaw Alignment (`state.align_yaw(xref[0, 3])`)**
+
+Before computing tracking errors, the current vehicle yaw is aligned with the reference yaw:
+
+**The problem**: Yaw angles wrap around at $\pm\pi$. If the current yaw is $+\pi$ and the reference is $-\pi$, the difference appears to be $2\pi$ (360°), which is physically the same orientation but mathematically a huge error.
+
+**The solution**: `align_yaw()` adjusts the vehicle's yaw representation to be within $\pi$ radians of the reference yaw:
+- If the difference is more than $\pi$, add or subtract $2\pi$ to bring it closer
+- This ensures the tracking error calculation is meaningful
+
+**Why this matters**: Without alignment, MPC would see a huge yaw error and try to "correct" it by spinning 360°, which is wasteful and can cause instability.
+
+---
+
+**Iterative Solving (Up to `MAX_ITER` iterations)**
+
+MPC solves the optimization problem iteratively because the linearization needs to be refined around the actual solution trajectory.
+
+**The Iterative Loop**
+
+The process repeats up to `MAX_ITER` times:
+
+1. **Initial guess**: Start with a control sequence `controls` (initially all zeros)
+2. **Predict motion**: Use `_predict_motion(state, controls, dt)` to get `xbar` (predicted future states)
+   - This provides the linearization point for the next step
+3. **Solve QP**: Call `_linear_mpc_control(xref, xbar, last_steer, dt)` to solve the linearized QP
+   - Returns improved `controls` and `states`
+4. **Check convergence**: Compute the change in controls:
+   $$du = \|\text{new\_controls} - \text{old\_controls}\|$$
+   - If $du < \text{DU\_TH}$ (threshold), the solution has converged → exit loop
+   - Otherwise, continue iterating
+
+- **Linearization accuracy**: The linearized model is only accurate near the reference trajectory
+- **First iteration**: Linearizes around the zero-control prediction (may be far from optimal)
+- **Subsequent iterations**: Linearizes around the improved trajectory from the previous iteration
+- **Convergence**: Usually converges in 1-3 iterations because each iteration refines the linearization point
+
+---
+
+**Output: MPCResult**
+
+After convergence (or reaching `MAX_ITER`), the function returns an `MPCResult` containing:
+
+- **`controls`**: Future $H$ steps of `[accel, steer]` pairs (shape $(H \times 2)$)
+  - Only the **first** control (`controls[0]`) is actually executed
+  - The rest are planned but discarded (receding horizon principle)
+
+- **`states`**: Predicted future states (shape $(H+1) \times 4$)
+  - Reordered to a format suitable for visualization: `[x, y, yaw, v]`
+  - Shows where the vehicle is predicted to go if these controls are applied
+
+- **`ref_states`**: Corresponding reference points from the trajectory
+  - Same shape as `states`
+  - Used for comparison and visualization
+
+- **`brake_trajectory`**: If braking was triggered, this contains the braking reference trajectory
+  - Used for visualization and debugging
+
+---
+
+**The Complete Execution Flow**
+
+**Every frame (every `dt` seconds):**
+1. **Extract reference segment** (`_find_xref()`)
+   - Find where we are on the trajectory
+   - Extract the next $H$ steps worth of reference states
+   - Handle edge cases (direction switches, braking, goal arrival)
+
+2. **Align yaw** (`state.align_yaw()`)
+   - Ensure yaw error calculation is meaningful
+
+3. **Iterative optimization** (up to `MAX_ITER` times)
+   - Predict motion with current guess
+   - Linearize around prediction
+   - Solve QP
+   - Check convergence
+   - Repeat if needed
+
+4. **Return result**
+   - Extract first control action
+   - Execute it on the vehicle
+   - Discard the rest (will be recomputed next frame)
+
+**Why this works**: By recomputing the entire plan every frame, MPC can:
+- **React to disturbances**: If the vehicle drifts off-path, the next frame's optimization corrects it
+- **Handle uncertainty**: Model errors and external disturbances are naturally compensated
+- **Maintain safety**: Constraints are re-evaluated every frame, ensuring feasibility
+
+### **MPC Implementation**
+
