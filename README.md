@@ -733,21 +733,20 @@ The real vehicle model is **nonlinear** (it involves $\cos\psi$, $\sin\psi$, and
 
 MPC uses a clever trick: instead of solving the nonlinear problem globally, we **linearize** the model around a reference trajectory. This transforms the nonlinear optimization into a **quadratic programming (QP)** problem, which can be solved efficiently using standard solvers (like OSQP or CVXPY).
 
-**Kinematic Bicycle Model**
-
-Given:
-- $u_k = [a_k, \delta_k]$: throttle/brake (longitudinal acceleration $a_k$) and front wheel steering angle $\delta_k$
-- $L$: wheelbase (`Car.WHEEL_BASE`)
-
-The discretized kinematic model is:
-$$
-\begin{aligned}
-X_{k+1} &= X_k + v_k \cos\psi_k\,\Delta t \\
-Y_{k+1} &= Y_k + v_k \sin\psi_k\,\Delta t \\
-v_{k+1} &= v_k + a_k\,\Delta t \\
-\psi_{k+1} &= \psi_k + \frac{v_k}{L}\tan\delta_k\,\Delta t
-\end{aligned}
-$$
+> **Kinematic Bicycle Model**
+>
+> Given:
+> - $u_k = [a_k, \delta_k]$: throttle/brake (longitudinal acceleration $a_k$) and front wheel steering angle $\delta_k$
+> - $L$: wheelbase (`Car.WHEEL_BASE`)
+>The discretized kinematic model is:
+>$$
+>\begin{aligned}
+>X_{k+1} &= X_k + v_k \cos\psi_k\,\Delta t \\
+>Y_{k+1} &= Y_k + v_k \sin\psi_k\,\Delta t \\
+>v_{k+1} &= v_k + a_k\,\Delta t \\
+>\psi_{k+1} &= \psi_k + \frac{v_k}{L}\tan\delta_k\,\Delta t
+>\end{aligned}
+>$$
 
 **1.1 The Mathematical Principle**
 
